@@ -172,24 +172,21 @@ jobs:
         with:
           name: claude-code-node-${{ matrix.version }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           scope: '@cometix'
-
-      - name: Update npm
-        run: npm install -g npm@latest
 
       - name: Publish to npm (OIDC Trusted Publishing)
         run: |
           TARBALL="claude-code-node-${{ matrix.version }}.tar.gz"
           VERSION="${{ matrix.version }}"
 
-          if npm view "@cometix/claude-code@${VERSION}" version &>/dev/null; then
+          if npx npm@latest view "@cometix/claude-code@${VERSION}" version &>/dev/null; then
             echo "Already published, skipping"
             exit 0
           fi
 
-          npm publish "${TARBALL}" --access public --provenance
+          npx npm@latest publish "${TARBALL}" --access public --provenance
           echo "✓ Published @cometix/claude-code@${VERSION}"

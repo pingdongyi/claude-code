@@ -29,12 +29,16 @@ function buildPackageJson(wrapperPkg) {
   return {
     name: '@cometix/claude-code',
     version: wrapperPkg.version,
+    description: wrapperPkg.description ?? '',
+    repository: {
+      type: 'git',
+      url: 'https://github.com/CometixSpace/claude-code',
+    },
     bin: { claude: 'cli.js' },
     engines: { node: '>=18.0.0' },
     // No "type": "module" — Bun SEA cli.js uses CJS (require/exports)
     author: wrapperPkg.author ?? 'Anthropic <support@anthropic.com>',
     license: wrapperPkg.license ?? 'SEE LICENSE IN README.md',
-    description: wrapperPkg.description ?? '',
     homepage: wrapperPkg.homepage ?? 'https://github.com/anthropics/claude-code',
     bugs: wrapperPkg.bugs ?? { url: 'https://github.com/anthropics/claude-code/issues' },
     scripts: {},
