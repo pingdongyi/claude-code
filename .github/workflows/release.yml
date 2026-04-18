@@ -79,16 +79,17 @@ jobs:
       - name: Verify build
         run: |
           cd "./dist/${{ matrix.version }}/cc"
-          # Install deps for verification
           npm install --production --no-audit --no-fund
           node cli.js --version
-          echo "---"
           node cli.js --help | head -5
+          # Clean up node_modules before packaging
+          rm -rf node_modules package-lock.json
 
       - name: Package tarball
         run: |
           cd "./dist/${{ matrix.version }}"
-          tar czf "../../claude-code-node-${{ matrix.version }}.tar.gz" cc/
+          mv cc package
+          tar czf "../../claude-code-node-${{ matrix.version }}.tar.gz" package/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -171,9 +172,6 @@ jobs:
         with:
           name: claude-code-node-${{ matrix.version }}
 
-      - name: Extract package
-        run: tar xzf "claude-code-node-${{ matrix.version }}.tar.gz"
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -181,16 +179,14 @@ jobs:
           scope: '@cometix'
 
       - name: Publish to npm (OIDC Trusted Publishing)
-        working-directory: cc
         run: |
-          PKG_NAME=$(node -e "console.log(require('./package.json').name)")
-          PKG_VERSION=$(node -e "console.log(require('./package.json').version)")
-          echo "Publishing ${PKG_NAME}@${PKG_VERSION}"
+          TARBALL="claude-code-node-${{ matrix.version }}.tar.gz"
+          VERSION="${{ matrix.version }}"
 
-          if npm view "${PKG_NAME}@${PKG_VERSION}" version &>/dev/null; then
+          if npm view "@cometix/claude-code@${VERSION}" version &>/dev/null; then
             echo "Already published, skipping"
             exit 0
           fi
 
-          npm publish --access public --provenance
-          echo "✓ Published ${PKG_NAME}@${PKG_VERSION}"
+          npm publish "${TARBALL}" --access public --provenance
+          echo "✓ Published @cometix/claude-code@${VERSION}"
