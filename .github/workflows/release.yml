@@ -1,0 +1,199 @@
+name: Fetch & Restore Claude Code
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Specific version (leave empty for auto-detect)'
+        required: false
+        type: string
+      force:
+        description: 'Force rebuild even if release exists'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.detect.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Detect new versions
+        id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "versions=[\"${{ inputs.version }}\"]" >> "$GITHUB_OUTPUT"
+            echo "Manual: ${{ inputs.version }}"
+          else
+            # Get existing releases
+            EXISTING=$(gh release list --limit 200 --json tagName \
+              --jq '[.[].tagName | ltrimstr("v")]' 2>/dev/null || echo '[]')
+            echo "Existing releases: $EXISTING"
+
+            # Check for new versions
+            VERSIONS=$(node scripts/check-new-versions.mjs \
+              --existing "$EXISTING" --json)
+            echo "New versions: $VERSIONS"
+            echo "versions=$VERSIONS" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.versions != '[]' && needs.check.outputs.versions != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJson(needs.check.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Build v${{ matrix.version }}
+        run: |
+          node scripts/fetch-and-process.mjs \
+            --version "${{ matrix.version }}" \
+            --output "./dist/${{ matrix.version }}"
+
+      - name: Verify build
+        run: |
+          cd "./dist/${{ matrix.version }}/cc"
+          # Install deps for verification
+          npm install --production --no-audit --no-fund
+          node cli.js --version
+          echo "---"
+          node cli.js --help | head -5
+
+      - name: Package tarball
+        run: |
+          cd "./dist/${{ matrix.version }}"
+          tar czf "../../claude-code-node-${{ matrix.version }}.tar.gz" cc/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-code-node-${{ matrix.version }}
+          path: claude-code-node-${{ matrix.version }}.tar.gz
+
+  release:
+    needs: [check, build]
+    if: needs.check.outputs.versions != '[]' && needs.check.outputs.versions != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJson(needs.check.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: claude-code-node-${{ matrix.version }}
+
+      - name: Sync CHANGELOG from upstream
+        run: |
+          curl -sL "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md" \
+            -o CHANGELOG.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || (git commit -m "changelog: sync v${{ matrix.version }}" && git push)
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ matrix.version }}"
+          TARBALL="claude-code-node-${VERSION}.tar.gz"
+
+          # Check if release exists
+          if gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" &>/dev/null; then
+            if [ "${{ inputs.force }}" = "true" ]; then
+              echo "Force mode: deleting existing release v${VERSION}"
+              gh release delete "v${VERSION}" --repo "$GITHUB_REPOSITORY" --yes
+            else
+              echo "Release v${VERSION} already exists, skipping"
+              exit 0
+            fi
+          fi
+
+          BODY=$(gh api "repos/anthropics/claude-code/releases/tags/v${VERSION}" --jq '.body' 2>/dev/null || echo "")
+
+          gh release create "v${VERSION}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "v${VERSION}" \
+            --notes "$BODY" \
+            "${TARBALL}"
+
+          echo "✓ Released v${VERSION}"
+
+  publish:
+    needs: [check, build]
+    if: needs.check.outputs.versions != '[]' && needs.check.outputs.versions != ''
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJson(needs.check.outputs.versions) }}
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: claude-code-node-${{ matrix.version }}
+
+      - name: Extract package
+        run: tar xzf "claude-code-node-${{ matrix.version }}.tar.gz"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@cometix'
+
+      - name: Update npm (OIDC requires >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - name: Publish to npm (OIDC Trusted Publishing)
+        working-directory: cc
+        run: |
+          PKG_NAME=$(node -e "console.log(require('./package.json').name)")
+          PKG_VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "Publishing ${PKG_NAME}@${PKG_VERSION}"
+
+          if npm view "${PKG_NAME}@${PKG_VERSION}" version &>/dev/null; then
+            echo "Already published, skipping"
+            exit 0
+          fi
+
+          npm publish --access public --provenance
+          echo "✓ Published ${PKG_NAME}@${PKG_VERSION}"
