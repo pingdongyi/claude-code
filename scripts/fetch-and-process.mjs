@@ -145,11 +145,12 @@ async function downloadRipgrep(tmpDir, rgVersion) {
 
       if (info.type === 'tar') {
         // Extract just the rg binary from the archive
+        // Use --wildcards for GNU tar (Linux), BSD tar (macOS) handles wildcards natively
         execFileSync('tar', [
           'xzf', archivePath,
           '-C', destDir,
           '--strip-components=1',
-          '--include', `*/${info.bin}`,
+          '--wildcards', `*/${info.bin}`,
         ]);
       } else {
         // zip (Windows) — use unzip
@@ -206,7 +207,7 @@ async function downloadSeccomp(tmpDir) {
     'xzf', join(tmpDir, tgz),
     '-C', secDir,
     '--strip-components=1',
-    '--include=*/dist/vendor/seccomp/*',
+    '--wildcards', '*/dist/vendor/seccomp/*',
   ]);
 
   const seccompDir = join(secDir, 'dist', 'vendor', 'seccomp');
