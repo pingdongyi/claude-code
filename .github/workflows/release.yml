@@ -1,4 +1,4 @@
-name: Fetch & Restore Claude Code
+name: Release
 
 on:
   schedule:
