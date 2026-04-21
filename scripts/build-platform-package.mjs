@@ -1,4 +1,4 @@
-import { mkdir, writeFile, copyFile, stat } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile, stat, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // Platform key → vendor directory name mapping
@@ -40,6 +40,7 @@ export async function buildPlatformPackage({
 
   // 1. Copy patched cli.js
   await copyFile(patchedCliPath, join(outputDir, 'cli.js'));
+  await chmod(join(outputDir, 'cli.js'), 0o755);
   console.log(`  [OK] cli.js`);
 
   // 2. vendor/audio-capture
@@ -65,6 +66,7 @@ export async function buildPlatformPackage({
       const dest = join(outputDir, 'vendor', 'ripgrep', rgVd);
       await mkdir(dest, { recursive: true });
       await copyFile(src, join(dest, rgBin));
+      if (!rgBin.endsWith('.exe')) await chmod(join(dest, rgBin), 0o755);
       console.log(`  [OK] vendor/ripgrep/${rgVd}/`);
     } catch {
       console.log(`  [!]  vendor/ripgrep/${rgVd}/ — not found`);
