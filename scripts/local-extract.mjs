@@ -227,21 +227,12 @@ async function detectRgVersion(binPath) {
 // ──────────────────────────────────────────────
 
 async function createTarball(srcDir, destPath) {
-  const pkgName = basename(destPath, '.tgz');
   const tmpWrap = join(tmpdir(), `pkg-wrap-${Date.now()}`);
-  await mkdir(join(tmpWrap, 'package'), { recursive: true });
+  const pkgDir = join(tmpWrap, 'package');
+  await mkdir(pkgDir, { recursive: true });
 
-  // Copy all files
-  const files = await readdir(srcDir, { withFileTypes: true, recursive: true });
-  for (const file of files) {
-    if (file.isFile()) {
-      const relPath = file.path.slice(srcDir.length + 1);
-      const srcPath = join(file.path, file.name);
-      const dstPath = join(tmpWrap, 'package', relPath, file.name);
-      await mkdir(join(tmpWrap, 'package', relPath), { recursive: true });
-      await copyFile(srcPath, dstPath);
-    }
-  }
+  // Use cp -r for reliable recursive copy
+  execFileSync('cp', ['-r', srcDir, pkgDir], { stdio: 'pipe' });
 
   // Create tarball
   execFileSync('tar', ['czf', destPath, '-C', tmpWrap, 'package'], { stdio: 'pipe' });
@@ -259,43 +250,33 @@ async function verifyPackage(distDir, platform = 'linux-x64') {
   try {
     await mkdir(verifyDir, { recursive: true });
 
-    // Copy main package
-    const mainDir = join(distDir, 'main');
-    const files = await readdir(mainDir, { withFileTypes: true, recursive: true });
-    for (const file of files) {
-      if (file.isFile()) {
-        const relPath = file.path.slice(mainDir.length + 1);
-        const srcPath = join(file.path, file.name);
-        const dstPath = join(verifyDir, relPath, file.name);
-        await mkdir(join(verifyDir, relPath), { recursive: true });
-        await copyFile(srcPath, dstPath);
-      }
-    }
+    // Copy main package using cp -r
+    execFileSync('cp', ['-r', join(distDir, 'main'), verifyDir], { stdio: 'pipe' });
 
     // Copy platform-specific files
     const platformDir = join(distDir, 'packages', platform);
     if (existsSync(platformDir)) {
       const cliJs = join(platformDir, 'cli.js');
       const vendorDir = join(platformDir, 'vendor');
-      if (existsSync(cliJs)) await copyFile(cliJs, join(verifyDir, 'cli.js'));
+      if (existsSync(cliJs)) await copyFile(cliJs, join(verifyDir, 'main', 'cli.js'));
       if (existsSync(vendorDir)) {
-        await copyFile(vendorDir, join(verifyDir, 'vendor'));
+        execFileSync('cp', ['-r', vendorDir, join(verifyDir, 'main')], { stdio: 'pipe' });
       }
     }
 
     // Install and test
     console.log('  Installing dependencies...');
     execFileSync('npm', ['install', '--omit=optional', '--no-audit', '--no-fund'],
-      { cwd: verifyDir, encoding: 'utf8', timeout: 120_000, stdio: ['pipe', 'pipe', 'pipe'] });
+      { cwd: join(verifyDir, 'main'), encoding: 'utf8', timeout: 120_000, stdio: ['pipe', 'pipe', 'pipe'] });
 
     console.log('  Testing --version...');
     const versionOut = execFileSync('node', ['cli.js', '--version'],
-      { cwd: verifyDir, encoding: 'utf8', timeout: 10_000 });
+      { cwd: join(verifyDir, 'main'), encoding: 'utf8', timeout: 10_000 });
     console.log(`    ${versionOut.trim()}`);
 
     console.log('  Testing --help...');
     const helpOut = execFileSync('node', ['cli.js', '--help'],
-      { cwd: verifyDir, encoding: 'utf8', timeout: 10_000 });
+      { cwd: join(verifyDir, 'main'), encoding: 'utf8', timeout: 10_000 });
     console.log(`    ${helpOut.split('\n').slice(0, 3).join('\n    ')}`);
 
     console.log('  ✓ Verification passed');
