@@ -223,6 +223,7 @@ async function extractPlatform({
   }
 
   const cliSrcPath = join(tmpDir, 'cli-src', `${platform}.js`);
+  await mkdir(dirname(cliSrcPath), { recursive: true });
   await writeFile(cliSrcPath, cliJs);
 
   // Verify Node.js compatibility
