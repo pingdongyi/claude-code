@@ -343,8 +343,9 @@ export async function localExtract({
   // Set bin directly to cli.js
   pkg.bin = { claude: 'cli.js' };
 
-  // Remove postinstall (no longer needed)
+  // Remove scripts that block local use
   delete pkg.scripts.postinstall;
+  delete pkg.scripts.prepare;
 
   // Add vendor to files
   pkg.files = ['cli.js', 'vendor/', 'sdk-tools.d.ts'];
