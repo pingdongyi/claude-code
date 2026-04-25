@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Local extraction script - Single package output
+ * Local extraction script - Multi-platform support
  *
- * Outputs a single @anthropic-ai/claude-code package ready for local install.
+ * Outputs @anthropic-ai/claude-code package(s) ready for local install.
  * Usage:
- *   node local-extract.mjs --version 2.1.119
- *   node local-extract.mjs --latest
- *   node local-extract.mjs --version 2.1.119 --output ./dist
+ *   node local-extract.mjs --latest                      # Current platform
+ *   node local-extract.mjs --latest --platform win32-x64 # Specific platform
+ *   node local-extract.mjs --latest --all                # All platforms
  */
 
 import { mkdir, rm, writeFile, stat, copyFile, readdir, readFile } from 'node:fs/promises';
@@ -26,23 +26,12 @@ const CDN_BASE = 'https://downloads.claude.ai/claude-code-releases';
 const CURRENT_PLATFORM = `${process.platform}-${process.arch}`;
 const DEFAULT_RG_VERSION = '14.1.1';
 
-// Platform to SEA platform mapping (handle musl and android)
-function getSEAPlatform() {
-  if (process.platform === 'android') return `linux-${process.arch}`;
-
-  // Detect musl on Linux
-  if (process.platform === 'linux') {
-    try {
-      const report = typeof process.report?.getReport === 'function'
-        ? process.report.getReport() : null;
-      if (report?.header?.glibcVersionRuntime === undefined) {
-        return `linux-${process.arch}-musl`;
-      }
-    } catch {}
-  }
-
-  return CURRENT_PLATFORM;
-}
+const SEA_PLATFORMS = [
+  'darwin-arm64', 'darwin-x64',
+  'linux-arm64', 'linux-x64',
+  'linux-arm64-musl', 'linux-x64-musl',
+  'win32-arm64', 'win32-x64',
+];
 
 // ──────────────────────────────────────────────
 //  Download helpers
@@ -88,42 +77,39 @@ async function downloadWrapper(version, tmpDir) {
 }
 
 // ──────────────────────────────────────────────
-//  Download ripgrep for current platform
+//  Ripgrep helpers (multi-platform)
 // ──────────────────────────────────────────────
 
-function getRgInfo(rgVersion) {
-  const platform = process.platform;
-  const arch = process.arch;
+function getRgArchive(platform, rgVersion) {
+  const [os, arch, musl] = platform.split('-');
 
-  // Map to ripgrep archive names
-  if (platform === 'darwin' && arch === 'arm64') {
+  if (os === 'darwin' && arch === 'arm64') {
     return { archive: `ripgrep-${rgVersion}-aarch64-apple-darwin.tar.gz`, bin: 'rg' };
   }
-  if (platform === 'darwin' && arch === 'x64') {
+  if (os === 'darwin' && arch === 'x64') {
     return { archive: `ripgrep-${rgVersion}-x86_64-apple-darwin.tar.gz`, bin: 'rg' };
   }
-  if (platform === 'linux' && arch === 'arm64') {
-    // Both glibc and musl use same GNU archive
+  if (os === 'linux' && arch === 'arm64') {
     return { archive: `ripgrep-${rgVersion}-aarch64-unknown-linux-gnu.tar.gz`, bin: 'rg' };
   }
-  if (platform === 'linux' && arch === 'x64') {
-    // Use musl version for better compatibility
+  if (os === 'linux' && arch === 'x64') {
+    // Use musl version for better compatibility (works on both glibc and musl)
     return { archive: `ripgrep-${rgVersion}-x86_64-unknown-linux-musl.tar.gz`, bin: 'rg' };
   }
-  if (platform === 'win32' && arch === 'arm64') {
+  if (os === 'win32' && arch === 'arm64') {
     return { archive: `ripgrep-${rgVersion}-aarch64-pc-windows-msvc.zip`, bin: 'rg.exe', type: 'zip' };
   }
-  if (platform === 'win32' && arch === 'x64') {
+  if (os === 'win32' && arch === 'x64') {
     return { archive: `ripgrep-${rgVersion}-x86_64-pc-windows-msvc.zip`, bin: 'rg.exe', type: 'zip' };
   }
 
   return null;
 }
 
-async function downloadRipgrep(tmpDir, rgVersion) {
-  const info = getRgInfo(rgVersion);
+async function downloadRipgrepForPlatform(tmpDir, platform, rgVersion) {
+  const info = getRgArchive(platform, rgVersion);
   if (!info) {
-    console.log('  [skip] ripgrep — unsupported platform');
+    console.log(`  [skip] ripgrep — unsupported platform ${platform}`);
     return null;
   }
 
@@ -133,7 +119,7 @@ async function downloadRipgrep(tmpDir, rgVersion) {
   try {
     await downloadFile(`${RG_BASE}/${info.archive}`, archivePath);
 
-    const destDir = join(tmpDir, 'ripgrep');
+    const destDir = join(tmpDir, 'ripgrep', platform);
     await mkdir(destDir, { recursive: true });
 
     if (info.type === 'zip') {
@@ -142,20 +128,19 @@ async function downloadRipgrep(tmpDir, rgVersion) {
       tarExtract(archivePath, destDir, 1, [`*/${info.bin}`]);
     }
 
-    // Verify
     await stat(join(destDir, info.bin));
     await rm(archivePath, { force: true });
 
     // Download LICENSE
     try {
       await downloadFile(`https://raw.githubusercontent.com/BurntSushi/ripgrep/${rgVersion}/COPYING`,
-        join(destDir, 'COPYING'));
+        join(tmpDir, 'ripgrep', 'COPYING'));
     } catch {}
 
-    console.log(`  ✓ ripgrep v${rgVersion}`);
+    console.log(`  ✓ ripgrep v${rgVersion} for ${platform}`);
     return destDir;
   } catch (e) {
-    console.log(`  ⚠ ripgrep download failed: ${e.message.split('\n')[0]}`);
+    console.log(`  ⚠ ripgrep for ${platform} failed: ${e.message.split('\n')[0]}`);
     return null;
   }
 }
@@ -164,8 +149,9 @@ async function downloadRipgrep(tmpDir, rgVersion) {
 //  Download seccomp (Linux only)
 // ──────────────────────────────────────────────
 
-async function downloadSeccomp(tmpDir) {
-  if (process.platform !== 'linux') return null;
+async function downloadSeccomp(tmpDir, platform) {
+  const [os] = platform.split('-');
+  if (os !== 'linux') return null;
 
   const secDir = join(tmpDir, 'seccomp');
   await mkdir(secDir, { recursive: true });
@@ -180,7 +166,7 @@ async function downloadSeccomp(tmpDir) {
 
   tarExtract(join(tmpDir, tgz), secDir, 1, ['*/dist/vendor/seccomp/*']);
 
-  const arch = process.arch;
+  const [, arch] = platform.split('-');
   const seccompFile = join(secDir, 'dist', 'vendor', 'seccomp', arch, 'apply-seccomp');
   try {
     await stat(seccompFile);
@@ -192,114 +178,88 @@ async function downloadSeccomp(tmpDir) {
 }
 
 // ──────────────────────────────────────────────
-//  Main extraction function
+//  Extract single platform
 // ──────────────────────────────────────────────
 
-export async function localExtract({
+async function extractPlatform({
+  platform,
   version,
-  outputDir = './artifacts',
-  verify = true,
+  tmpDir,
+  wrapperDir,
+  manifest,
+  outputDir,
 }) {
-  // Determine output path: if dir doesn't end with .tgz, append official filename
-  const tarballFilename = `anthropic-ai-claude-code-${version}.tgz`;
-  const outputPath = outputDir.endsWith('.tgz') ? outputDir : join(outputDir, tarballFilename);
+  console.log(`\n--- Processing ${platform} ---`);
 
-  // Use a temp directory separate from output file
-  const tmpDir = join(tmpdir(), `claude-extract-${Date.now()}`);
-  await mkdir(tmpDir, { recursive: true });
-
-  const seaPlatform = getSEAPlatform();
-  console.log(`\nTarget: ${seaPlatform} (current: ${CURRENT_PLATFORM})`);
-
-  // ── Step 1: Download official wrapper ──
-  console.log(`\n[1] Downloading official wrapper v${version}...`);
-  const wrapperDir = await downloadWrapper(version, tmpDir);
-
-  // ── Step 2: Download SEA binary ──
-  console.log(`\n[2] Downloading SEA binary for ${seaPlatform}...`);
-  const manifest = fetchJson(`${CDN_BASE}/${version}/manifest.json`);
-  console.log(`  Build: ${manifest.buildDate}`);
-
-  const platformInfo = manifest.platforms[seaPlatform];
+  // Download SEA binary
+  console.log(`[1] Downloading SEA binary...`);
+  const platformInfo = manifest.platforms[platform];
   if (!platformInfo) {
-    console.error(`  ✗ Platform ${seaPlatform} not in manifest`);
-    process.exit(1);
+    console.error(`  ✗ Platform ${platform} not in manifest`);
+    return null;
   }
 
-  const binDir = join(tmpDir, 'bin');
+  const binDir = join(tmpDir, 'bins', platform);
   await mkdir(binDir, { recursive: true });
   const binPath = join(binDir, platformInfo.binary);
-  await downloadFile(`${CDN_BASE}/${version}/${seaPlatform}/${platformInfo.binary}`, binPath);
+  await downloadFile(`${CDN_BASE}/${version}/${platform}/${platformInfo.binary}`, binPath);
   console.log(`  ✓ ${(await stat(binPath)).size / 1024 / 1024 | 0}MB`);
 
-  // ── Step 3: Extract and patch cli.js ──
-  console.log(`\n[3] Extracting and patching...`);
+  // Extract and patch cli.js
+  console.log(`[2] Extracting and patching...`);
   const result = await extractBunSEA(binPath);
   let cliJs = null;
+  let audioCapture = null;
 
   for (let idx = 0; idx < result.modules.length; idx++) {
     const mod = result.modules[idx];
-    if (idx === result.entryPointId) {
-      cliJs = mod.contents;
-      break;
-    }
+    if (idx === result.entryPointId) cliJs = mod.contents;
+    if (mod.name.endsWith('audio-capture.node')) audioCapture = mod.contents;
   }
 
   if (!cliJs) {
     console.error('  ✗ cli.js not found in SEA');
-    process.exit(1);
+    return null;
   }
 
-  // Write for verification and patching
-  const cliSrcPath = join(tmpDir, 'cli-src.js');
+  const cliSrcPath = join(tmpDir, 'cli-src', `${platform}.js`);
   await writeFile(cliSrcPath, cliJs);
 
   // Verify Node.js compatibility
   const { compatible, fatal } = verifyNodeCompat(cliSrcPath);
   if (!compatible) {
     console.error(`  ✗ Node.js compat check failed (${fatal} fatal)`);
-    console.error('    Anthropic may have removed dual-runtime fallbacks.');
-    process.exit(1);
+    return null;
   }
   console.log('  ✓ Node.js compat verified');
 
   // Patch
-  const patchedCliPath = join(tmpDir, 'cli.js');
+  const patchedCliPath = join(tmpDir, 'patched', `${platform}.js`);
+  await mkdir(dirname(patchedCliPath), { recursive: true });
   await patchFile(cliSrcPath, patchedCliPath);
   console.log('  ✓ cli.js patched');
 
-  // Extract audio-capture.node if present
-  let audioCapture = null;
-  for (const mod of result.modules) {
-    if (mod.name.endsWith('audio-capture.node')) {
-      audioCapture = mod.contents;
-      break;
-    }
-  }
+  // Download vendor
+  console.log(`[3] Downloading vendor...`);
+  const ripgrepDir = await downloadRipgrepForPlatform(tmpDir, platform, DEFAULT_RG_VERSION);
+  const seccompDir = await downloadSeccomp(tmpDir, platform);
 
-  // ── Step 4: Download vendor dependencies ──
-  console.log(`\n[4] Downloading vendor dependencies...`);
-  const ripgrepDir = await downloadRipgrep(tmpDir, DEFAULT_RG_VERSION);
-  const seccompDir = await downloadSeccomp(tmpDir);
-
-  // ── Step 5: Assemble package in staging directory ──
-  console.log(`\n[5] Assembling package...`);
-  const stagingDir = join(tmpDir, 'staging');
+  // Assemble staging package
+  console.log(`[4] Assembling package...`);
+  const stagingDir = join(tmpDir, 'staging', platform);
   await mkdir(stagingDir, { recursive: true });
 
-  // Copy wrapper files (LICENSE, README, etc.)
+  // Copy wrapper files
   const wrapperFiles = await readdir(wrapperDir, { withFileTypes: true });
   for (const file of wrapperFiles) {
     if (file.name === 'package.json' || file.name === 'cli.js' || file.name === 'bin') continue;
     if (file.isFile()) {
       await copyFile(join(wrapperDir, file.name), join(stagingDir, file.name));
-      console.log(`  ✓ ${file.name}`);
     }
   }
 
   // Copy patched cli.js
   await copyFile(patchedCliPath, join(stagingDir, 'cli.js'));
-  console.log('  ✓ cli.js');
 
   // Setup vendor directory
   const vendorDir = join(stagingDir, 'vendor');
@@ -307,15 +267,14 @@ export async function localExtract({
 
   // Ripgrep
   if (ripgrepDir) {
-    const rgInfo = getRgInfo(DEFAULT_RG_VERSION);
-    const rgBin = rgInfo.bin;
+    const info = getRgArchive(platform, DEFAULT_RG_VERSION);
+    const rgBin = info.bin;
     const rgDestDir = join(vendorDir, 'ripgrep');
     await mkdir(rgDestDir, { recursive: true });
     await copyFile(join(ripgrepDir, rgBin), join(rgDestDir, rgBin));
-    if (existsSync(join(ripgrepDir, 'COPYING'))) {
-      await copyFile(join(ripgrepDir, 'COPYING'), join(rgDestDir, 'COPYING'));
+    if (existsSync(join(tmpDir, 'ripgrep', 'COPYING'))) {
+      await copyFile(join(tmpDir, 'ripgrep', 'COPYING'), join(rgDestDir, 'COPYING'));
     }
-    console.log('  ✓ vendor/ripgrep/');
   }
 
   // Audio capture
@@ -323,18 +282,16 @@ export async function localExtract({
     const audioDir = join(vendorDir, 'audio-capture');
     await mkdir(audioDir, { recursive: true });
     await writeFile(join(audioDir, 'audio-capture.node'), audioCapture);
-    console.log('  ✓ vendor/audio-capture/');
   }
 
   // Seccomp
   if (seccompDir) {
-    const arch = process.arch;
+    const [, arch] = platform.split('-');
     const srcFile = join(seccompDir, arch, 'apply-seccomp');
     if (existsSync(srcFile)) {
       const secDestDir = join(vendorDir, 'seccomp');
       await mkdir(secDestDir, { recursive: true });
       await copyFile(srcFile, join(secDestDir, 'apply-seccomp'));
-      console.log('  ✓ vendor/seccomp/');
     }
   }
 
@@ -342,42 +299,35 @@ export async function localExtract({
   const pkgPath = join(wrapperDir, 'package.json');
   const pkg = JSON.parse(await readFile(pkgPath, 'utf8'));
 
-  // Add Node.js runtime dependencies (SEA embeds these, but we need them for Node.js)
   pkg.dependencies = {
     ws: '^8.18.0',
     yaml: '^2.7.0',
     undici: '^7.3.0',
   };
 
-  // Add @img/sharp optionalDependencies (for image processing, from Node.js version)
   pkg.optionalDependencies = {
-    '@img/sharp-linux-arm': '^0.34.2',
-    '@img/sharp-linux-x64': '^0.34.2',
-    '@img/sharp-win32-x64': '^0.34.2',
-    '@img/sharp-darwin-x64': '^0.34.2',
-    '@img/sharp-linux-arm64': '^0.34.2',
-    '@img/sharp-win32-arm64': '^0.34.2',
     '@img/sharp-darwin-arm64': '^0.34.2',
-    '@img/sharp-linuxmusl-x64': '^0.34.2',
+    '@img/sharp-darwin-x64': '^0.34.2',
+    '@img/sharp-linux-arm': '^0.34.2',
+    '@img/sharp-linux-arm64': '^0.34.2',
+    '@img/sharp-linux-x64': '^0.34.2',
     '@img/sharp-linuxmusl-arm64': '^0.34.2',
+    '@img/sharp-linuxmusl-x64': '^0.34.2',
+    '@img/sharp-win32-arm64': '^0.34.2',
+    '@img/sharp-win32-x64': '^0.34.2',
   };
 
-  // Set bin directly to cli.js
   pkg.bin = { claude: 'cli.js' };
-
-  // Remove scripts that block local use
   pkg.scripts = pkg.scripts || {};
   delete pkg.scripts.postinstall;
   delete pkg.scripts.prepare;
 
-  // Clean up files: remove obsolete entries, add new ones
+  // Clean and add files
   pkg.files = pkg.files || [];
-  pkg.files = pkg.files.filter(f => !f.startsWith('bin/'));
-  // Remove install.cjs and cli-wrapper.cjs (no longer needed)
-  pkg.files = pkg.files.filter(f => f !== 'install.cjs' && f !== 'cli-wrapper.cjs');
-  // Add essential files
+  pkg.files = pkg.files.filter(f => !f.startsWith('bin/') && f !== 'install.cjs' && f !== 'cli-wrapper.cjs');
   if (!pkg.files.includes('cli.js')) pkg.files.push('cli.js');
-  // Add vendor subdirectories based on what exists in stagingDir
+
+  // Add vendor subdirs
   const stagingVendor = join(stagingDir, 'vendor');
   if (existsSync(stagingVendor)) {
     const vendorDirs = readdirSync(stagingVendor, { withFileTypes: true });
@@ -388,52 +338,99 @@ export async function localExtract({
     }
   }
 
-  // Sort package.json fields for consistent output
-  if (pkg.dependencies) {
-    pkg.dependencies = Object.fromEntries(
-      Object.entries(pkg.dependencies).sort(([a], [b]) => a.localeCompare(b))
-    );
-  }
-  if (pkg.optionalDependencies) {
-    pkg.optionalDependencies = Object.fromEntries(
-      Object.entries(pkg.optionalDependencies).sort(([a], [b]) => a.localeCompare(b))
-    );
-  }
-  if (pkg.files) {
-    pkg.files.sort();
-  }
+  // Sort
+  pkg.dependencies = Object.fromEntries(Object.entries(pkg.dependencies).sort(([a], [b]) => a.localeCompare(b)));
+  pkg.optionalDependencies = Object.fromEntries(Object.entries(pkg.optionalDependencies).sort(([a], [b]) => a.localeCompare(b)));
+  pkg.files.sort();
 
   await writeFile(join(stagingDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
-  console.log('  ✓ package.json');
 
-  // ── Step 6: Create tarball ──
-  console.log(`\n[6] Creating tarball...`);
+  // Create tarball
+  console.log(`[5] Creating tarball...`);
+  await mkdir(outputDir, { recursive: true });
 
-  // Resolve output path to absolute
-  const absOutputPath = outputPath.startsWith('/') ? outputPath : join(process.cwd(), outputPath);
-  const outputDirPath = dirname(absOutputPath);
-  await mkdir(outputDirPath, { recursive: true });
-
-  const tarballName = execFileSync('npm', ['pack', '--pack-destination', outputDirPath],
+  const tarballName = execFileSync('npm', ['pack', '--pack-destination', outputDir],
     { cwd: stagingDir, encoding: 'utf8', timeout: 30_000 }).trim();
 
-  const generatedTarball = join(outputDirPath, tarballName);
+  const generatedTarball = join(outputDir, tarballName);
+  const desiredTarball = join(outputDir, `anthropic-ai-claude-code-${version}-${platform}.tgz`);
 
-  // Rename to desired output name if needed
-  const desiredName = absOutputPath.endsWith('.tgz') ? absOutputPath : `${absOutputPath}.tgz`;
-  if (generatedTarball !== desiredName) {
-    await copyFile(generatedTarball, desiredName);
+  if (generatedTarball !== desiredTarball) {
+    await copyFile(generatedTarball, desiredTarball);
     await rm(generatedTarball, { force: true });
   }
-  console.log(`  ✓ ${outputPath}`);
 
-  // ── Step 7: Cleanup ──
-  console.log(`\n[7] Cleaning up...`);
+  console.log(`  ✓ ${desiredTarball}`);
+
+  // Cleanup binary
+  await rm(binPath, { force: true });
+
+  return desiredTarball;
+}
+
+// ──────────────────────────────────────────────
+//  Main extraction function
+// ──────────────────────────────────────────────
+
+export async function localExtract({
+  version,
+  outputDir = './artifacts',
+  platforms = null, // null = current platform, array = specified platforms
+}) {
+  const tmpDir = join(tmpdir(), `claude-extract-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  // Determine platforms
+  const targetPlatforms = platforms || [getCurrentSEAPlatform()];
+  console.log(`\nTarget platforms: ${targetPlatforms.join(', ')}`);
+
+  // Download wrapper
+  console.log(`\n[0] Downloading official wrapper v${version}...`);
+  const wrapperDir = await downloadWrapper(version, tmpDir);
+
+  // Fetch manifest
+  const manifest = fetchJson(`${CDN_BASE}/${version}/manifest.json`);
+  console.log(`  Build: ${manifest.buildDate}`);
+
+  // Process each platform
+  const outputs = [];
+  for (const platform of targetPlatforms) {
+    const tarball = await extractPlatform({
+      platform,
+      version,
+      tmpDir,
+      wrapperDir,
+      manifest,
+      outputDir,
+    });
+    if (tarball) outputs.push(tarball);
+  }
+
+  // Cleanup
+  console.log(`\n[Final] Cleaning up...`);
   await rm(tmpDir, { recursive: true, force: true });
 
-  console.log(`\n✓ Done. Output: ${outputPath}`);
-  console.log('\nInstall with:');
-  console.log(`  npm install ${outputPath}`);
+  console.log(`\n✓ Done. Outputs:`);
+  for (const t of outputs) {
+    console.log(`  ${t}`);
+  }
+}
+
+// Get current platform's SEA variant
+function getCurrentSEAPlatform() {
+  if (process.platform === 'android') return `linux-${process.arch}`;
+
+  if (process.platform === 'linux') {
+    try {
+      const report = typeof process.report?.getReport === 'function'
+        ? process.report.getReport() : null;
+      if (report?.header?.glibcVersionRuntime === undefined) {
+        return `linux-${process.arch}-musl`;
+      }
+    } catch {}
+  }
+
+  return CURRENT_PLATFORM;
 }
 
 // ──────────────────────────────────────────────
@@ -448,7 +445,10 @@ if (isMain) {
     if (args[i] === '--version' && args[i+1]) flags.version = args[++i];
     else if (args[i] === '--output' && args[i+1]) flags.outputDir = args[++i];
     else if (args[i] === '--latest') flags.latest = true;
-    else if (args[i] === '--no-verify') flags.verify = false;
+    else if (args[i] === '--platform' && args[i+1]) {
+      flags.platforms = args[++i].split(',').map(p => p.trim());
+    }
+    else if (args[i] === '--all') flags.platforms = SEA_PLATFORMS;
   }
 
   if (!flags.version && !flags.latest) {
@@ -456,12 +456,16 @@ if (isMain) {
     console.error('       node local-extract.mjs --latest');
     console.error('');
     console.error('Options:');
-    console.error('  --output <dir>   Output directory (default: ./artifacts)');
-    console.error('                    Filename: anthropic-ai-claude-code-{version}.tgz');
-    console.error('  --no-verify      Skip Node.js compat verification');
-    console.error('  --latest         Use latest version');
+    console.error('  --output <dir>      Output directory (default: ./artifacts)');
+    console.error('  --platform <p>      Target platform(s), comma-separated (default: current)');
+    console.error('  --all               Process all platforms');
+    console.error('  --no-verify         Skip Node.js compat verification');
+    console.error('  --latest            Use latest version');
     console.error('');
-    console.error(`Current platform: ${CURRENT_PLATFORM}`);
+    console.error('Platforms:');
+    console.error(`  ${SEA_PLATFORMS.join(', ')}`);
+    console.error('');
+    console.error(`Current platform: ${CURRENT_PLATFORM} → ${getCurrentSEAPlatform()}`);
     process.exit(1);
   }
 
