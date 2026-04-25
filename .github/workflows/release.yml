@@ -146,21 +146,9 @@ jobs:
           # Get release notes from official Claude Code
           BODY=$(gh api "repos/anthropics/claude-code/releases/tags/v${VERSION}" --jq '.body' 2>/dev/null || echo "")
 
-          # Write combined release notes to a temp file (avoids shell quoting issues)
+          # Write combined release notes to a temp file
           NOTES_FILE=$(mktemp)
-          printf '%s\n\n---\n\n## Installation (Node.js restored)\n\n' "$BODY" >> "$NOTES_FILE"
-          printf 'These packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries).\n\n' >> "$NOTES_FILE"
-          printf '### Quick Install\n\nDownload the tarball for your platform and install locally:\n\n' >> "$NOTES_FILE"
-          printf '    npm install ./anthropic-ai-claude-code-%s-linux-x64.tgz\n\n' "$VERSION" >> "$NOTES_FILE"
-          printf '### Available Platforms\n\n' >> "$NOTES_FILE"
-          printf '- macOS ARM64: anthropic-ai-claude-code-%s-darwin-arm64.tgz\n' "$VERSION" >> "$NOTES_FILE"
-          printf '- macOS x64: anthropic-ai-claude-code-%s-darwin-x64.tgz\n' "$VERSION" >> "$NOTES_FILE"
-          printf '- Linux ARM64: anthropic-ai-claude-code-%s-linux-arm64.tgz\n' "$VERSION" >> "$NOTES_FILE"
-          printf '- Linux x64: anthropic-ai-claude-code-%s-linux-x64.tgz\n' "$VERSION" >> "$NOTES_FILE"
-          printf '- Linux ARM64 (musl): anthropic-ai-claude-code-%s-linux-arm64-musl.tgz\n' "$VERSION" >> "$NOTES_FILE"
-          printf '- Linux x64 (musl): anthropic-ai-claude-code-%s-linux-x64-musl.tgz\n' "$VERSION" >> "$NOTES_FILE"
-          printf '- Windows ARM64: anthropic-ai-claude-code-%s-win32-arm64.tgz\n' "$VERSION" >> "$NOTES_FILE"
-          printf '- Windows x64: anthropic-ai-claude-code-%s-win32-x64.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '%s\n\n---\n\n## Installation (Node.js restored)\n\nThese packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries).\n\n### Quick Install\n\nDownload the tarball for your platform and install locally:\n\n    npm install ./anthropic-ai-claude-code-@VERSION@-linux-x64.tgz\n\n### Available Platforms\n\n- macOS ARM64: anthropic-ai-claude-code-@VERSION@-darwin-arm64.tgz\n- macOS x64: anthropic-ai-claude-code-@VERSION@-darwin-x64.tgz\n- Linux ARM64: anthropic-ai-claude-code-@VERSION@-linux-arm64.tgz\n- Linux x64: anthropic-ai-claude-code-@VERSION@-linux-x64.tgz\n- Linux ARM64 (musl): anthropic-ai-claude-code-@VERSION@-linux-arm64-musl.tgz\n- Linux x64 (musl): anthropic-ai-claude-code-@VERSION@-linux-x64-musl.tgz\n- Windows ARM64: anthropic-ai-claude-code-@VERSION@-win32-arm64.tgz\n- Windows x64: anthropic-ai-claude-code-@VERSION@-win32-x64.tgz\n' "$BODY" | sed "s/@VERSION@/${VERSION}/g" > "$NOTES_FILE"
 
           gh release create "v${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
