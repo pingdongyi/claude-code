@@ -146,36 +146,25 @@ jobs:
           # Get release notes from official Claude Code
           BODY=$(gh api "repos/anthropics/claude-code/releases/tags/v${VERSION}" --jq '.body' 2>/dev/null || echo "")
 
+          # Write combined release notes to a temp file (avoids shell quoting issues)
           NOTES_FILE=$(mktemp)
           {
             printf '%s\n\n' "$BODY"
-            cat <<'EOF'
----
-
-## Installation (Node.js restored)
-
-These packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries).
-
-### Quick Install
-
-Download the tarball for your platform and install locally:
-
-    npm install ./anthropic-ai-claude-code-VERSION_PLACEHOLDER-linux-x64.tgz
-
-### Available Platforms
-
-| Platform | Tarball |
-|----------|---------|
-| macOS ARM64 | anthropic-ai-claude-code-VERSION_PLACEHOLDER-darwin-arm64.tgz |
-| macOS x64 | anthropic-ai-claude-code-VERSION_PLACEHOLDER-darwin-x64.tgz |
-| Linux ARM64 | anthropic-ai-claude-code-VERSION_PLACEHOLDER-linux-arm64.tgz |
-| Linux x64 | anthropic-ai-claude-code-VERSION_PLACEHOLDER-linux-x64.tgz |
-| Linux ARM64 (musl) | anthropic-ai-claude-code-VERSION_PLACEHOLDER-linux-arm64-musl.tgz |
-| Linux x64 (musl) | anthropic-ai-claude-code-VERSION_PLACEHOLDER-linux-x64-musl.tgz |
-| Windows ARM64 | anthropic-ai-claude-code-VERSION_PLACEHOLDER-win32-arm64.tgz |
-| Windows x64 | anthropic-ai-claude-code-VERSION_PLACEHOLDER-win32-x64.tgz |
-EOF
-          } | sed "s/VERSION_PLACEHOLDER/${VERSION}/g" > "$NOTES_FILE"
+            printf '%s\n' "---"
+            printf '\n%s\n\n%s\n\n' "## Installation (Node.js restored)" "These packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries)."
+            printf '%s\n\n%s\n\n' "### Quick Install" "Download the tarball for your platform and install locally:"
+            printf '    npm install ./anthropic-ai-claude-code-%s-linux-x64.tgz\n\n' "$VERSION"
+            printf '%s\n\n' "### Available Platforms"
+            printf '%s\n%s\n' "| Platform | Tarball |" "|----------|---------|"
+            printf '| macOS ARM64 | anthropic-ai-claude-code-%s-darwin-arm64.tgz |\n' "$VERSION"
+            printf '| macOS x64 | anthropic-ai-claude-code-%s-darwin-x64.tgz |\n' "$VERSION"
+            printf '| Linux ARM64 | anthropic-ai-claude-code-%s-linux-arm64.tgz |\n' "$VERSION"
+            printf '| Linux x64 | anthropic-ai-claude-code-%s-linux-x64.tgz |\n' "$VERSION"
+            printf '| Linux ARM64 (musl) | anthropic-ai-claude-code-%s-linux-arm64-musl.tgz |\n' "$VERSION"
+            printf '| Linux x64 (musl) | anthropic-ai-claude-code-%s-linux-x64-musl.tgz |\n' "$VERSION"
+            printf '| Windows ARM64 | anthropic-ai-claude-code-%s-win32-arm64.tgz |\n' "$VERSION"
+            printf '| Windows x64 | anthropic-ai-claude-code-%s-win32-x64.tgz |\n' "$VERSION"
+          } > "$NOTES_FILE"
 
           gh release create "v${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
