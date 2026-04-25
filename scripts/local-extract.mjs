@@ -197,10 +197,11 @@ async function downloadSeccomp(tmpDir) {
 
 export async function localExtract({
   version,
-  outputDir = './claude-code.tgz',
+  outputPath = './claude-code.tgz',
   verify = true,
 }) {
-  const tmpDir = join(outputDir, '.tmp');
+  // Use a temp directory separate from output file
+  const tmpDir = join(tmpdir(), `claude-extract-${Date.now()}`);
   await mkdir(tmpDir, { recursive: true });
 
   const seaPlatform = getSEAPlatform();
@@ -355,27 +356,32 @@ export async function localExtract({
 
   // ── Step 6: Create tarball ──
   console.log(`\n[6] Creating tarball...`);
-  const tarballName = execFileSync('npm', ['pack', '--pack-destination', dirname(outputDir)],
+
+  // Resolve output path to absolute
+  const absOutputPath = outputPath.startsWith('/') ? outputPath : join(process.cwd(), outputPath);
+  const outputDirPath = dirname(absOutputPath);
+  await mkdir(outputDirPath, { recursive: true });
+
+  const tarballName = execFileSync('npm', ['pack', '--pack-destination', outputDirPath],
     { cwd: stagingDir, encoding: 'utf8', timeout: 30_000 }).trim();
 
-  const generatedTarball = join(dirname(outputDir), tarballName);
+  const generatedTarball = join(outputDirPath, tarballName);
 
   // Rename to desired output name if needed
-  const desiredName = outputDir.endsWith('.tgz') ? outputDir : `${outputDir}.tgz`;
+  const desiredName = absOutputPath.endsWith('.tgz') ? absOutputPath : `${absOutputPath}.tgz`;
   if (generatedTarball !== desiredName) {
     await copyFile(generatedTarball, desiredName);
     await rm(generatedTarball, { force: true });
   }
-  console.log(`  ✓ ${desiredName}`);
+  console.log(`  ✓ ${outputPath}`);
 
   // ── Step 7: Cleanup ──
   console.log(`\n[7] Cleaning up...`);
   await rm(tmpDir, { recursive: true, force: true });
 
-  const tarballPath = outputDir.endsWith('.tgz') ? outputDir : `${outputDir}.tgz`;
-  console.log(`\n✓ Done. Output: ${tarballPath}`);
+  console.log(`\n✓ Done. Output: ${outputPath}`);
   console.log('\nInstall with:');
-  console.log(`  npm install ${tarballPath}`);
+  console.log(`  npm install ${outputPath}`);
 }
 
 // ──────────────────────────────────────────────
@@ -388,7 +394,7 @@ if (isMain) {
   const flags = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--version' && args[i+1]) flags.version = args[++i];
-    else if (args[i] === '--output' && args[i+1]) flags.outputDir = args[++i];
+    else if (args[i] === '--output' && args[i+1]) flags.outputPath = args[++i];
     else if (args[i] === '--latest') flags.latest = true;
     else if (args[i] === '--no-verify') flags.verify = false;
   }
@@ -406,7 +412,7 @@ if (isMain) {
     process.exit(1);
   }
 
-  if (!flags.outputDir) flags.outputDir = './claude-code.tgz';
+  if (!flags.outputPath) flags.outputPath = './claude-code.tgz';
 
   if (flags.latest || !flags.version) {
     flags.version = execFileSync('npm', ['view', '@anthropic-ai/claude-code', 'version'],
