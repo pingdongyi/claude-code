@@ -12,6 +12,9 @@ on:
         required: false
         type: boolean
         default: false
+  schedule:
+    # Check for new versions every 3 hours
+    - cron: '0 */3 * * *'
 
 permissions:
   contents: write
@@ -59,60 +62,44 @@ jobs:
           node-version: '20'
       - run: npm ci
 
-      - name: Build all packages
+      - name: Build all platform packages
         run: |
-          node scripts/fetch-and-process.mjs \
+          node scripts/local-extract.mjs \
             --version "${{ matrix.version }}" \
-            --output "./dist/${{ matrix.version }}"
+            --output "./artifacts" \
+            --all
 
-      - name: Verify main package
+      - name: Verify linux-x64 package
         run: |
-          DIST="./dist/${{ matrix.version }}"
-          VERIFY=/tmp/verify-main
+          VERSION="${{ matrix.version }}"
+          TARBALL="./artifacts/anthropic-ai-claude-code-${VERSION}-linux-x64.tgz"
 
-          # Copy main package to temp dir for verification
-          cp -r "$DIST/main" "$VERIFY"
+          if [ ! -f "$TARBALL" ]; then
+            echo "Tarball not found"
+            ls -la ./artifacts/
+            exit 1
+          fi
 
-          # Simulate postinstall with linux-x64 platform package
-          cp "$DIST/packages/linux-x64/cli.js" "$VERIFY/cli.js"
-          cp -r "$DIST/packages/linux-x64/vendor" "$VERIFY/vendor"
+          # Extract and test
+          mkdir -p /tmp/verify
+          tar xzf "$TARBALL" -C /tmp/verify
+          cd /tmp/verify/package
 
-          cd "$VERIFY"
           npm install --omit=optional --no-audit --no-fund
           node cli.js --version
           node cli.js --help | head -5
 
-          rm -rf "$VERIFY"
+          rm -rf /tmp/verify
 
-      - name: Package tarballs
+      - name: List artifacts
         run: |
-          DIST="./dist/${{ matrix.version }}"
-          VERSION="${{ matrix.version }}"
-          mkdir -p ./artifacts
-
-          # Main package
-          mkdir -p /tmp/pkg-wrap/package
-          cp -r "$DIST/main"/* /tmp/pkg-wrap/package/
-          tar czf "./artifacts/cometix-claude-code-${VERSION}.tgz" -C /tmp/pkg-wrap package/
-          rm -rf /tmp/pkg-wrap
-
-          # Platform packages
-          for platform in darwin-arm64 darwin-x64 linux-arm64 linux-x64 linux-arm64-musl linux-x64-musl win32-arm64 win32-x64 android-arm64; do
-            if [ -d "$DIST/packages/$platform" ]; then
-              mkdir -p /tmp/pkg-wrap/package
-              cp -r "$DIST/packages/$platform"/* /tmp/pkg-wrap/package/
-              tar czf "./artifacts/cometix-claude-code-${platform}-${VERSION}.tgz" -C /tmp/pkg-wrap package/
-              rm -rf /tmp/pkg-wrap
-            fi
-          done
-
           ls -lh ./artifacts/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: packages-${{ matrix.version }}
-          path: artifacts/
+          path: artifacts/*.tgz
 
   release:
     needs: [check, build]
@@ -159,64 +146,45 @@ jobs:
             fi
           fi
 
+          # Get release notes from official Claude Code
           BODY=$(gh api "repos/anthropics/claude-code/releases/tags/v${VERSION}" --jq '.body' 2>/dev/null || echo "")
+
+          # Add installation instructions
+          BODY="${BODY}
+
+---
+
+## Installation (Node.js restored)
+
+These packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries).
+
+### Quick Install
+
+\`\`\`bash
+# Download the tarball for your platform
+# Example for linux-x64:
+npm install anthropic-ai-claude-code-${VERSION}-linux-x64.tgz
+
+# Or use file: prefix
+npm install file:./anthropic-ai-claude-code-${VERSION}-linux-x64.tgz
+\`\`\`
+
+### Available Platforms
+
+| Platform | Tarball |
+|----------|---------|
+| macOS ARM64 | \`anthropic-ai-claude-code-${VERSION}-darwin-arm64.tgz\` |
+| macOS x64 | \`anthropic-ai-claude-code-${VERSION}-darwin-x64.tgz\` |
+| Linux ARM64 | \`anthropic-ai-claude-code-${VERSION}-linux-arm64.tgz\` |
+| Linux x64 | \`anthropic-ai-claude-code-${VERSION}-linux-x64.tgz\` |
+| Linux ARM64 (musl) | \`anthropic-ai-claude-code-${VERSION}-linux-arm64-musl.tgz\` |
+| Linux x64 (musl) | \`anthropic-ai-claude-code-${VERSION}-linux-x64-musl.tgz\` |
+| Windows ARM64 | \`anthropic-ai-claude-code-${VERSION}-win32-arm64.tgz\` |
+| Windows x64 | \`anthropic-ai-claude-code-${VERSION}-win32-x64.tgz\` |
+"
 
           gh release create "v${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "v${VERSION}" \
             --notes "$BODY" \
-            artifacts/*
-
-  publish:
-    needs: [check, build]
-    if: needs.check.outputs.versions != '[]' && needs.check.outputs.versions != ''
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ${{ fromJson(needs.check.outputs.versions) }}
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: packages-${{ matrix.version }}
-          path: artifacts/
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@cometix'
-
-      - name: Publish platform packages
-        run: |
-          VERSION="${{ matrix.version }}"
-          for tgz in ./artifacts/cometix-claude-code-*-${VERSION}.tgz; do
-            [ -f "$tgz" ] || continue
-            PKG=$(basename "$tgz" | sed "s/-${VERSION}.tgz//" | sed 's/^cometix-/@cometix\//')
-            echo "Publishing ${PKG}@${VERSION}..."
-            if npm view "${PKG}@${VERSION}" version &>/dev/null 2>&1; then
-              echo "  Already published, skipping"
-            else
-              npx npm@latest publish "$tgz" --access public --provenance || echo "  Failed (may need package init)"
-            fi
-          done
-
-      - name: Publish main package
-        run: |
-          VERSION="${{ matrix.version }}"
-          TARBALL="./artifacts/cometix-claude-code-${VERSION}.tgz"
-          if [ ! -f "$TARBALL" ]; then
-            echo "Tarball not found: $TARBALL"
-            ls -la ./artifacts/
-            exit 1
-          fi
-          if npm view "@cometix/claude-code@${VERSION}" version &>/dev/null 2>&1; then
-            echo "Already published, skipping"
-          else
-            npx npm@latest publish "$TARBALL" --access public --provenance
-            echo "Published @cometix/claude-code@${VERSION}"
-          fi
+            artifacts/*.tgz
