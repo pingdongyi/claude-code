@@ -197,7 +197,7 @@ async function downloadSeccomp(tmpDir) {
 
 export async function localExtract({
   version,
-  outputDir = './dist',
+  outputDir = './claude-code.tgz',
   verify = true,
 }) {
   const tmpDir = join(outputDir, '.tmp');
@@ -277,26 +277,27 @@ export async function localExtract({
   const ripgrepDir = await downloadRipgrep(tmpDir, DEFAULT_RG_VERSION);
   const seccompDir = await downloadSeccomp(tmpDir);
 
-  // ── Step 5: Assemble output package ──
-  console.log(`\n[5] Assembling output package...`);
-  await mkdir(outputDir, { recursive: true });
+  // ── Step 5: Assemble package in staging directory ──
+  console.log(`\n[5] Assembling package...`);
+  const stagingDir = join(tmpDir, 'staging');
+  await mkdir(stagingDir, { recursive: true });
 
   // Copy wrapper files (LICENSE, README, etc.)
   const wrapperFiles = await readdir(wrapperDir, { withFileTypes: true });
   for (const file of wrapperFiles) {
     if (file.name === 'package.json' || file.name === 'cli.js' || file.name === 'bin') continue;
     if (file.isFile()) {
-      await copyFile(join(wrapperDir, file.name), join(outputDir, file.name));
+      await copyFile(join(wrapperDir, file.name), join(stagingDir, file.name));
       console.log(`  ✓ ${file.name}`);
     }
   }
 
   // Copy patched cli.js
-  await copyFile(patchedCliPath, join(outputDir, 'cli.js'));
+  await copyFile(patchedCliPath, join(stagingDir, 'cli.js'));
   console.log('  ✓ cli.js');
 
   // Setup vendor directory
-  const vendorDir = join(outputDir, 'vendor');
+  const vendorDir = join(stagingDir, 'vendor');
   await mkdir(vendorDir, { recursive: true });
 
   // Ripgrep
@@ -339,9 +340,6 @@ export async function localExtract({
   // Remove platform optionalDependencies (we have everything embedded)
   pkg.optionalDependencies = {};
 
-  // Remove @img/sharp deps too (optional)
-  // Keep them if user wants image support
-
   // Set bin directly to cli.js
   pkg.bin = { claude: 'cli.js' };
 
@@ -351,16 +349,32 @@ export async function localExtract({
   // Add vendor to files
   pkg.files = ['cli.js', 'vendor/', 'sdk-tools.d.ts'];
 
-  await writeFile(join(outputDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
+  await writeFile(join(stagingDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
   console.log('  ✓ package.json');
 
-  // ── Step 6: Cleanup ──
-  console.log(`\n[6] Cleaning up...`);
+  // ── Step 6: Create tarball ──
+  console.log(`\n[6] Creating tarball...`);
+  const tarballName = execFileSync('npm', ['pack', '--pack-destination', dirname(outputDir)],
+    { cwd: stagingDir, encoding: 'utf8', timeout: 30_000 }).trim();
+
+  const generatedTarball = join(dirname(outputDir), tarballName);
+
+  // Rename to desired output name if needed
+  const desiredName = outputDir.endsWith('.tgz') ? outputDir : `${outputDir}.tgz`;
+  if (generatedTarball !== desiredName) {
+    await copyFile(generatedTarball, desiredName);
+    await rm(generatedTarball, { force: true });
+  }
+  console.log(`  ✓ ${desiredName}`);
+
+  // ── Step 7: Cleanup ──
+  console.log(`\n[7] Cleaning up...`);
   await rm(tmpDir, { recursive: true, force: true });
 
-  console.log(`\n✓ Done. Output: ${outputDir}/`);
+  const tarballPath = outputDir.endsWith('.tgz') ? outputDir : `${outputDir}.tgz`;
+  console.log(`\n✓ Done. Output: ${tarballPath}`);
   console.log('\nInstall with:');
-  console.log(`  npm install ${outputDir}`);
+  console.log(`  npm install ${tarballPath}`);
 }
 
 // ──────────────────────────────────────────────
@@ -383,13 +397,15 @@ if (isMain) {
     console.error('       node local-extract.mjs --latest');
     console.error('');
     console.error('Options:');
-    console.error('  --output <dir>  Output directory (default: ./dist)');
-    console.error('  --no-verify     Skip Node.js compat verification');
-    console.error('  --latest        Use latest version');
+    console.error('  --output <path>  Output tarball path (default: ./claude-code.tgz)');
+    console.error('  --no-verify      Skip Node.js compat verification');
+    console.error('  --latest         Use latest version');
     console.error('');
     console.error(`Current platform: ${CURRENT_PLATFORM}`);
     process.exit(1);
   }
+
+  if (!flags.outputDir) flags.outputDir = './claude-code.tgz';
 
   if (flags.latest || !flags.version) {
     flags.version = execFileSync('npm', ['view', '@anthropic-ai/claude-code', 'version'],
