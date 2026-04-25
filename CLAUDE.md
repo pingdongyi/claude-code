@@ -10,23 +10,29 @@ This project restores Claude Code for Node.js execution by extracting JavaScript
 
 ```bash
 npm ci                           # Install dependencies
-npm run process -- --latest      # Process latest Claude Code version (full pipeline)
+npm run process -- --latest      # Process latest (full pipeline, all platforms)
 npm run process -- --version X.Y.Z  # Process specific version
-npm run local -- --latest        # Local extraction (no GitHub Actions dependency)
-npm run local -- --version X.Y.Z --tarballs  # Local extraction with tarballs
+npm run local -- --latest        # Local extraction (single package, current platform)
+npm run local -- --version X.Y.Z --output ./my-package
 npm run extract                  # Extract from Bun SEA binary (requires args)
 npm run patch                    # Patch cli.js for Node.js compat (requires args)
 ```
 
 Individual script usage:
 ```bash
+# Full pipeline (GitHub Actions style)
 node scripts/fetch-and-process.mjs --latest
 node scripts/fetch-and-process.mjs --version 2.1.116 --output ./dist
-node scripts/local-extract.mjs --latest                      # Current platform only
-node scripts/local-extract.mjs --latest --all                # All platforms
-node scripts/local-extract.mjs --version 2.1.119 --platform linux-x64,linux-arm64
-node scripts/local-extract.mjs --version 2.1.119 --tarballs  # Create npm tarballs
-node scripts/local-extract.mjs --version 2.1.119 --no-verify # Skip verification
+
+# Local extraction (single package, ready for npm install)
+node scripts/local-extract.mjs --latest
+node scripts/local-extract.mjs --version 2.1.119 --output ./my-package
+node scripts/local-extract.mjs --version 2.1.119 --no-verify
+
+# Install the output package
+npm install ./my-package
+
+# Utilities
 node scripts/bun-sea-extract.mjs <binary> [outdir]
 node scripts/node-compat-patch.mjs <cli.js> [output.js]
 node scripts/verify-node-compat.mjs <cli.js>
