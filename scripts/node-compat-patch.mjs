@@ -39,16 +39,20 @@ export function stripBunWrapper(code) {
 
   if (!code.startsWith(BUN_HEADER) && !code.startsWith(CJS_OPEN)) return code;
 
+  // Only strip @bun header, keep CJS wrapper intact
+  // The CJS wrapper provides require, module, exports, __filename, __dirname
+  // which are needed for Node.js CJS-style code execution
   if (code.startsWith(BUN_HEADER)) {
     code = code.slice(code.indexOf('\n') + 1);
   }
-  if (code.startsWith(CJS_OPEN)) {
-    code = code.slice(CJS_OPEN.length);
-  }
+
+  // Check if code ends with `})` (IIFE without execution)
+  // Add execution call: }) → })(exports, require, module, __filename, __dirname);
   const trimmed = code.trimEnd();
-  if (trimmed.endsWith(CJS_CLOSE)) {
-    code = trimmed.slice(0, -CJS_CLOSE.length);
+  if (trimmed.endsWith(CJS_CLOSE) && !trimmed.endsWith('})();') && !trimmed.endsWith('})(exports')) {
+    code = trimmed.slice(0, -CJS_CLOSE.length) + '})(exports, require, module, __filename, __dirname);';
   }
+
   return code;
 }
 
@@ -94,15 +98,15 @@ export function astPatch(code) {
       return;
     }
 
-    // P1: createRequire("file:///home/runner/...") → import.meta.require
-    // Note: createRequire creates a require function for ESM modules.
-    // In Node.js 20+, import.meta.require is available, or use createRequire(import.meta.url)
+    // P1: createRequire("file:///home/runner/...") → createRequire(__filename)
+    // createRequire needs a path to create a require function relative to that path.
+    // __filename is available in CJS context (provided by wrapper).
     if (node.type === 'CallExpression' &&
         node.callee?.type === 'MemberExpression' &&
         node.callee.property?.name === 'createRequire' &&
         node.arguments?.length === 1 &&
         isHardcodedBuildPath(node.arguments[0])) {
-      replacements.push({ start: node.start, end: node.end, replacement: '(0,eval)("require")' });
+      replacements.push({ start: node.arguments[0].start, end: node.arguments[0].end, replacement: '__filename' });
       stats.p1Requires++;
       return;
     }
