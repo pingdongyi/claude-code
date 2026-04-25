@@ -64,22 +64,22 @@ node scripts/verify-node-compat.mjs <cli.js>
 - Uses Acorn AST parser for safe code transformations
 
 **Platform packages:**
-- 9 output packages: 8 SEA platforms + android-arm64 (alias of linux-arm64)
-- Each contains: `cli.js`, `vendor/ripgrep/`, `vendor/audio-capture/`, `vendor/seccomp/` (Linux only)
-- Main package uses `install.cjs` postinstall to copy platform-specific files
+- 8 standalone packages per platform: darwin-arm64, darwin-x64, linux-arm64, linux-x64, linux-arm64-musl, linux-x64-musl, win32-arm64, win32-x64
+- Each tarball contains everything: cli.js + vendor/ripgrep + vendor/audio-capture + vendor/seccomp (Linux)
+- No platform optionalDependencies needed - each package is self-contained
+- Package name kept as `@anthropic-ai/claude-code` (official) for local install replacement
 
 ## Key Constraints
 
 - **Node.js compat verification must pass before patching** — The build aborts if dual-runtime fallbacks are missing
 - **First SEA version is 2.1.113** — Earlier versions were Node.js-native and don't need this project
-- **Ripgrep version is detected from binary** — Falls back to DEFAULT_RG_VERSION (14.1.1) if detection fails
-- **Android reuses linux-arm64** — android-arm64 package aliases linux-arm64's cli.js
+- **CJS wrapper must be preserved** — Provides `exports`, `require`, `module`, `__filename`, `__dirname` globals
 
 ## Release Workflow
 
 GitHub Actions workflow (`release.yml`) runs every 3 hours:
-1. Detects new versions not yet in releases
-2. Builds all packages in parallel matrix
-3. Verifies main package works (install + `--version` + `--help`)
-4. Creates GitHub release with artifacts
-5. Publishes to npm with OIDC provenance
+1. Detects new versions from npm (SEA platforms)
+2. Extracts all 8 platforms using `local-extract.mjs --all`
+3. Verifies linux-x64 package works (install + `--version` + `--help`)
+4. Creates GitHub release with all platform tarballs
+5. Does NOT publish to npm (keep official package name for local use)
