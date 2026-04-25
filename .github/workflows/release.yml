@@ -146,8 +146,8 @@ jobs:
           # Get release notes from official Claude Code
           BODY=$(gh api "repos/anthropics/claude-code/releases/tags/v${VERSION}" --jq '.body' 2>/dev/null || echo "")
 
-          # Add installation instructions
-          BODY="${BODY}
+          # Append installation instructions using heredoc
+          INSTRUCTIONS=$(cat <<EOF
 
 ---
 
@@ -157,28 +157,30 @@ These packages restore Claude Code for Node.js execution (extracted from officia
 
 ### Quick Install
 
-\`\`\`bash
+```bash
 # Download the tarball for your platform
 # Example for linux-x64:
 npm install anthropic-ai-claude-code-${VERSION}-linux-x64.tgz
 
 # Or use file: prefix
 npm install file:./anthropic-ai-claude-code-${VERSION}-linux-x64.tgz
-\`\`\`
+```
 
 ### Available Platforms
 
 | Platform | Tarball |
 |----------|---------|
-| macOS ARM64 | \`anthropic-ai-claude-code-${VERSION}-darwin-arm64.tgz\` |
-| macOS x64 | \`anthropic-ai-claude-code-${VERSION}-darwin-x64.tgz\` |
-| Linux ARM64 | \`anthropic-ai-claude-code-${VERSION}-linux-arm64.tgz\` |
-| Linux x64 | \`anthropic-ai-claude-code-${VERSION}-linux-x64.tgz\` |
-| Linux ARM64 (musl) | \`anthropic-ai-claude-code-${VERSION}-linux-arm64-musl.tgz\` |
-| Linux x64 (musl) | \`anthropic-ai-claude-code-${VERSION}-linux-x64-musl.tgz\` |
-| Windows ARM64 | \`anthropic-ai-claude-code-${VERSION}-win32-arm64.tgz\` |
-| Windows x64 | \`anthropic-ai-claude-code-${VERSION}-win32-x64.tgz\` |
-          "
+| macOS ARM64 | `anthropic-ai-claude-code-${VERSION}-darwin-arm64.tgz` |
+| macOS x64 | `anthropic-ai-claude-code-${VERSION}-darwin-x64.tgz` |
+| Linux ARM64 | `anthropic-ai-claude-code-${VERSION}-linux-arm64.tgz` |
+| Linux x64 | `anthropic-ai-claude-code-${VERSION}-linux-x64.tgz` |
+| Linux ARM64 (musl) | `anthropic-ai-claude-code-${VERSION}-linux-arm64-musl.tgz` |
+| Linux x64 (musl) | `anthropic-ai-claude-code-${VERSION}-linux-x64-musl.tgz` |
+| Windows ARM64 | `anthropic-ai-claude-code-${VERSION}-win32-arm64.tgz` |
+| Windows x64 | `anthropic-ai-claude-code-${VERSION}-win32-x64.tgz` |
+EOF
+          )
+          BODY="${BODY}${INSTRUCTIONS}"
 
           gh release create "v${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
