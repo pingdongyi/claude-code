@@ -49,7 +49,7 @@ node scripts/verify-node-compat.mjs <cli.js>
 4. `verify-node-compat.mjs` — Pre-patch verification of dual-runtime fallbacks
 5. `node-compat-patch.mjs` — AST-based patching for Node.js compatibility
 6. `build-platform-package.mjs` — Creates per-platform optional packages
-7. `build-main-package.mjs` — Creates main `@cometix/claude-code` package
+7. `build-main-package.mjs` — Creates main `@anthropic-ai/claude-code` package
 
 **Bun SEA extraction** (`bun-sea-extract.mjs`):
 - Uses `node-lief` to parse ELF/MachO/PE binaries

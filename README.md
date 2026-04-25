@@ -1,4 +1,4 @@
-# @cometix/claude-code
+# @anthropic-ai/claude-code
 
 Claude Code restored for Node.js — extracted from official Bun SEA binaries and patched for Node.js runtime compatibility.
 
@@ -7,7 +7,7 @@ Starting from v2.1.113, Anthropic ships Claude Code as native Bun binaries inste
 ## Install
 
 ```bash
-npm install -g @cometix/claude-code
+npm install -g @anthropic-ai/claude-code
 ```
 
 ## What it does

@@ -23,11 +23,11 @@ export async function buildMainPackage({
   // 1. package.json
   const optDeps = {};
   for (const p of ALL_PLATFORMS) {
-    optDeps[`@cometix/claude-code-${p}`] = version;
+    optDeps[`@anthropic-ai/claude-code-${p}`] = version;
   }
 
   const pkg = {
-    name: '@cometix/claude-code',
+    name: '@anthropic-ai/claude-code',
     version,
     bin: { claude: 'cli.js' },
     engines: { node: '>=18.0.0' },
@@ -35,9 +35,6 @@ export async function buildMainPackage({
     author: 'Anthropic <support@anthropic.com>',
     license: 'SEE LICENSE IN README.md',
     description: 'Claude Code restored for Node.js runtime.',
-    homepage: 'https://github.com/CometixSpace/claude-code',
-    repository: { type: 'git', url: 'https://github.com/CometixSpace/claude-code.git' },
-    bugs: { url: 'https://github.com/CometixSpace/claude-code/issues' },
     dependencies: {
       ws: '^8.18.0',
       yaml: '^2.7.0',

@@ -274,9 +274,9 @@ export async function fetchAndProcess({
   await rm(tmpDir, { recursive: true, force: true });
 
   console.log(`\n✓ Done. Output in ${outputDir}/`);
-  console.log(`  main/          — @cometix/claude-code`);
+  console.log(`  main/          — @anthropic-ai/claude-code`);
   for (const p of OUTPUT_PLATFORMS) {
-    console.log(`  packages/${p}/  — @cometix/claude-code-${p}`);
+    console.log(`  packages/${p}/  — @anthropic-ai/claude-code-${p}`);
   }
 }
 

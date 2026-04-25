@@ -68,7 +68,7 @@
 │  [7] 构建主包                                                        │
 │      build-main-package.mjs                                         │
 │      ────────────────────                                           │
-│      创建 @cometix/claude-code 主包                                  │
+│      创建 @anthropic-ai/claude-code 主包                                  │
 │      包含: package.json, install.cjs, cli.js 占位符                  │
 │                          ↓                                          │
 │  [8] 发布                                                           │
@@ -215,7 +215,7 @@ require("/$bunfs/root/audio-capture.node")
 
 ```
 npm 包结构
-├── @cometix/claude-code (主包)
+├── @anthropic-ai/claude-code (主包)
 │   ├── package.json
 │   │   ├── optionalDependencies: 9个平台包
 │   │   ├── dependencies: ws, yaml, undici
@@ -224,7 +224,7 @@ npm 包结构
 │   ├── cli.js (占位符，被 postinstall 替换)
 │   └── sdk-tools.d.ts (类型定义)
 │
-├── @cometix/claude-code-linux-x64 (平台包)
+├── @anthropic-ai/claude-code-linux-x64 (平台包)
 │   ├── package.json { os: ["linux"], cpu: ["x64"] }
 │   ├── cli.js (修补后的完整代码)
 │   └── vendor/
@@ -232,14 +232,14 @@ npm 包结构
 │       ├── audio-capture/x64-linux/audio-capture.node
 │       └── seccomp/x64/apply-seccomp
 │
-├── @cometix/claude-code-darwin-arm64 (平台包)
+├── @anthropic-ai/claude-code-darwin-arm64 (平台包)
 │   ├── cli.js
 │   └── vendor/
 │       ├── ripgrep/arm64-darwin/rg
 │       └── audio-capture/arm64-darwin/audio-capture.node
 │       (无 seccomp，macOS 不需要)
 │
-├── @cometix/claude-code-win32-x64 (平台包)
+├── @anthropic-ai/claude-code-win32-x64 (平台包)
 │   ├── cli.js
 │   └── vendor/
 │       ├── ripgrep/x64-win32/rg.exe
@@ -257,7 +257,7 @@ function main() {
   const platformKey = getPlatformKey(); // 如 "linux-x64"
 
   // 2. 找到对应的平台包
-  const pkgDir = require.resolve('@cometix/claude-code-linux-x64/package.json');
+  const pkgDir = require.resolve('@anthropic-ai/claude-code-linux-x64/package.json');
 
   // 3. 复制 cli.js 和 vendor/ 到主包目录
   copyFileSync(srcCli, destCli);

@@ -2,7 +2,7 @@
 const { copyFileSync, mkdirSync, readdirSync, statSync, existsSync } = require('fs');
 const path = require('path');
 
-const PACKAGE_PREFIX = '@cometix/claude-code';
+const PACKAGE_PREFIX = '@anthropic-ai/claude-code';
 
 const PLATFORMS = {
   'darwin-arm64':  { pkg: PACKAGE_PREFIX + '-darwin-arm64' },
@@ -51,7 +51,7 @@ function main() {
   const info = PLATFORMS[platformKey];
 
   if (!info) {
-    console.error(`[@cometix/claude-code postinstall] Unsupported platform: ${process.platform} ${process.arch}`);
+    console.error(`[@anthropic-ai/claude-code postinstall] Unsupported platform: ${process.platform} ${process.arch}`);
     console.error(`  Supported: ${Object.keys(PLATFORMS).join(', ')}`);
     return;
   }
@@ -60,7 +60,7 @@ function main() {
   try {
     pkgDir = path.dirname(require.resolve(info.pkg + '/package.json'));
   } catch {
-    console.error(`[@cometix/claude-code postinstall] Platform package "${info.pkg}" not found.`);
+    console.error(`[@anthropic-ai/claude-code postinstall] Platform package "${info.pkg}" not found.`);
     console.error('  This happens with --omit=optional or when the download failed.');
     console.error('  The `claude` command will show an error when invoked.');
     return;
@@ -74,7 +74,7 @@ function main() {
   try {
     copyFileSync(srcCli, path.join(dest, 'cli.js'));
   } catch (err) {
-    console.error(`[@cometix/claude-code postinstall] Failed to copy cli.js: ${err.message}`);
+    console.error(`[@anthropic-ai/claude-code postinstall] Failed to copy cli.js: ${err.message}`);
     return;
   }
 
@@ -83,7 +83,7 @@ function main() {
     try {
       copyDirSync(srcVendor, path.join(dest, 'vendor'));
     } catch (err) {
-      console.error(`[@cometix/claude-code postinstall] Failed to copy vendor/: ${err.message}`);
+      console.error(`[@anthropic-ai/claude-code postinstall] Failed to copy vendor/: ${err.message}`);
     }
   }
 }
