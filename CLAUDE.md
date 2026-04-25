@@ -24,13 +24,15 @@ Individual script usage:
 node scripts/fetch-and-process.mjs --latest
 node scripts/fetch-and-process.mjs --version 2.1.116 --output ./dist
 
-# Local extraction (single tarball)
-node scripts/local-extract.mjs --latest
-node scripts/local-extract.mjs --version 2.1.119 --output ./claude.tgz
+# Local extraction (multi-platform)
+node scripts/local-extract.mjs --latest                      # Current platform
+node scripts/local-extract.mjs --latest --platform win32-x64 # Specific platform
+node scripts/local-extract.mjs --latest --all                # All platforms
+node scripts/local-extract.mjs --version 2.1.119 --platform linux-x64,linux-arm64
 node scripts/local-extract.mjs --version 2.1.119 --no-verify
 
 # Install the tarball
-npm install ./claude.tgz
+npm install ./artifacts/anthropic-ai-claude-code-2.1.119-linux-x64.tgz
 
 # Utilities
 node scripts/bun-sea-extract.mjs <binary> [outdir]
