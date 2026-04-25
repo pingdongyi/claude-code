@@ -123,7 +123,24 @@ async function downloadRipgrepForPlatform(tmpDir, platform, rgVersion) {
     await mkdir(destDir, { recursive: true });
 
     if (info.type === 'zip') {
-      execFileSync('unzip', ['-jo', archivePath, `*/${info.bin}`, '-d', destDir], { stdio: 'pipe' });
+      // Try unzip first, fall back to python for zip extraction
+      try {
+        execFileSync('unzip', ['-jo', archivePath, `*/${info.bin}`, '-d', destDir], { stdio: 'pipe' });
+      } catch {
+        // Use python as fallback for zip extraction
+        execFileSync('python3', ['-c', `
+import zipfile
+import os
+import shutil
+with zipfile.ZipFile('${archivePath}', 'r') as z:
+    for name in z.namelist():
+        if name.endswith('${info.bin}'):
+            data = z.read(name)
+            with open(os.path.join('${destDir}', '${info.bin}'), 'wb') as f:
+                f.write(data)
+            break
+`], { stdio: 'pipe' });
+      }
     } else {
       tarExtract(archivePath, destDir, 1, [`*/${info.bin}`]);
     }
