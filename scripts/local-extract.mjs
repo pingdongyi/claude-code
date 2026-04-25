@@ -349,14 +349,18 @@ export async function localExtract({
     undici: '^7.3.0',
   };
 
-  // Remove platform optionalDependencies (we have cli.js + vendor embedded)
-  // Keep @img/sharp-* for image processing support
-  pkg.optionalDependencies = pkg.optionalDependencies || {};
-  for (const key of Object.keys(pkg.optionalDependencies)) {
-    if (key.startsWith('@anthropic-ai/claude-code-')) {
-      delete pkg.optionalDependencies[key];
-    }
-  }
+  // Add @img/sharp optionalDependencies (for image processing, from Node.js version)
+  pkg.optionalDependencies = {
+    '@img/sharp-linux-arm': '^0.34.2',
+    '@img/sharp-linux-x64': '^0.34.2',
+    '@img/sharp-win32-x64': '^0.34.2',
+    '@img/sharp-darwin-x64': '^0.34.2',
+    '@img/sharp-linux-arm64': '^0.34.2',
+    '@img/sharp-win32-arm64': '^0.34.2',
+    '@img/sharp-darwin-arm64': '^0.34.2',
+    '@img/sharp-linuxmusl-x64': '^0.34.2',
+    '@img/sharp-linuxmusl-arm64': '^0.34.2',
+  };
 
   // Set bin directly to cli.js
   pkg.bin = { claude: 'cli.js' };
@@ -369,10 +373,20 @@ export async function localExtract({
   // Clean up files: remove obsolete entries, add new ones
   pkg.files = pkg.files || [];
   pkg.files = pkg.files.filter(f => !f.startsWith('bin/'));
-  if (!pkg.files.includes('cli.js')) pkg.files.push('cli.js');
-  if (!pkg.files.includes('vendor/')) pkg.files.push('vendor/');
   // Remove install.cjs and cli-wrapper.cjs (no longer needed)
   pkg.files = pkg.files.filter(f => f !== 'install.cjs' && f !== 'cli-wrapper.cjs');
+  // Add essential files
+  if (!pkg.files.includes('cli.js')) pkg.files.push('cli.js');
+  // Add vendor subdirectories based on what we actually have
+  const vendorSubdirs = [];
+  if (ripgrepDir) vendorSubdirs.push('vendor/ripgrep/');
+  if (audioCapture) vendorSubdirs.push('vendor/audio-capture/');
+  if (seccompDir && existsSync(join(seccompDir, process.arch, 'apply-seccomp'))) {
+    vendorSubdirs.push('vendor/seccomp/');
+  }
+  for (const subdir of vendorSubdirs) {
+    if (!pkg.files.includes(subdir)) pkg.files.push(subdir);
+  }
 
   await writeFile(join(stagingDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
   console.log('  ✓ package.json');
