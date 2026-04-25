@@ -342,6 +342,13 @@ export async function localExtract({
   const pkgPath = join(wrapperDir, 'package.json');
   const pkg = JSON.parse(await readFile(pkgPath, 'utf8'));
 
+  // Add Node.js runtime dependencies (SEA embeds these, but we need them for Node.js)
+  pkg.dependencies = {
+    ws: '^8.18.0',
+    yaml: '^2.7.0',
+    undici: '^7.3.0',
+  };
+
   // Remove platform optionalDependencies (we have cli.js + vendor embedded)
   // Keep @img/sharp-* for image processing support
   const optDeps = pkg.optionalDependencies || {};
