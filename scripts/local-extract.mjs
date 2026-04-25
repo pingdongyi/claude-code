@@ -377,15 +377,15 @@ export async function localExtract({
   pkg.files = pkg.files.filter(f => f !== 'install.cjs' && f !== 'cli-wrapper.cjs');
   // Add essential files
   if (!pkg.files.includes('cli.js')) pkg.files.push('cli.js');
-  // Add vendor subdirectories based on what we actually have
-  const vendorSubdirs = [];
-  if (ripgrepDir) vendorSubdirs.push('vendor/ripgrep/');
-  if (audioCapture) vendorSubdirs.push('vendor/audio-capture/');
-  if (seccompDir && existsSync(join(seccompDir, process.arch, 'apply-seccomp'))) {
-    vendorSubdirs.push('vendor/seccomp/');
-  }
-  for (const subdir of vendorSubdirs) {
-    if (!pkg.files.includes(subdir)) pkg.files.push(subdir);
+  // Add vendor subdirectories based on what exists in stagingDir
+  const stagingVendor = join(stagingDir, 'vendor');
+  if (existsSync(stagingVendor)) {
+    const vendorDirs = readdirSync(stagingVendor, { withFileTypes: true });
+    for (const d of vendorDirs) {
+      if (d.isDirectory() && !pkg.files.includes(`vendor/${d.name}/`)) {
+        pkg.files.push(`vendor/${d.name}/`);
+      }
+    }
   }
 
   await writeFile(join(stagingDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
