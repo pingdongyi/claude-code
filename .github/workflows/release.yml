@@ -178,7 +178,7 @@ npm install file:./anthropic-ai-claude-code-${VERSION}-linux-x64.tgz
 | Linux x64 (musl) | \`anthropic-ai-claude-code-${VERSION}-linux-x64-musl.tgz\` |
 | Windows ARM64 | \`anthropic-ai-claude-code-${VERSION}-win32-arm64.tgz\` |
 | Windows x64 | \`anthropic-ai-claude-code-${VERSION}-win32-x64.tgz\` |
-"
+          "
 
           gh release create "v${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
