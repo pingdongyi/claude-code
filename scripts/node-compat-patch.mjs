@@ -29,31 +29,41 @@ function applyReplacements(code, replacements) {
 }
 
 // ──────────────────────────────────────────────
-//  Strip Bun CJS wrapper
+//  Strip Bun CJS wrapper (temporarily for parsing)
 // ──────────────────────────────────────────────
+
+const CJS_WRAPPER_PREFIX = '(function(exports, require, module, __filename, __dirname) {';
+const CJS_WRAPPER_SUFFIX = '})';
 
 export function stripBunWrapper(code) {
   const BUN_HEADER = '// @bun @bytecode @bun-cjs';
-  const CJS_OPEN = '(function(exports, require, module, __filename, __dirname) {';
-  const CJS_CLOSE = '})';
 
-  if (!code.startsWith(BUN_HEADER) && !code.startsWith(CJS_OPEN)) return code;
-
-  // Only strip @bun header, keep CJS wrapper intact
-  // The CJS wrapper provides require, module, exports, __filename, __dirname
-  // which are needed for Node.js CJS-style code execution
+  // Strip @bun header
   if (code.startsWith(BUN_HEADER)) {
     code = code.slice(code.indexOf('\n') + 1);
   }
 
-  // Check if code ends with `})` (IIFE without execution)
-  // Add execution call: }) → })(exports, require, module, __filename, __dirname);
-  const trimmed = code.trimEnd();
-  if (trimmed.endsWith(CJS_CLOSE) && !trimmed.endsWith('})();') && !trimmed.endsWith('})(exports')) {
-    code = trimmed.slice(0, -CJS_CLOSE.length) + '})(exports, require, module, __filename, __dirname);';
+  // Temporarily strip CJS wrapper for AST parsing
+  // We'll re-add it after patching
+  let hasWrapper = false;
+  if (code.startsWith(CJS_WRAPPER_PREFIX)) {
+    hasWrapper = true;
+    code = code.slice(CJS_WRAPPER_PREFIX.length);
   }
 
-  return code;
+  const trimmed = code.trimEnd();
+  if (hasWrapper && trimmed.endsWith(CJS_WRAPPER_SUFFIX)) {
+    code = trimmed.slice(0, -CJS_WRAPPER_SUFFIX.length);
+  }
+
+  return { code, hasWrapper };
+}
+
+export function restoreBunWrapper(code, hasWrapper) {
+  if (!hasWrapper) return code;
+
+  // Re-add CJS wrapper with IIFE execution
+  return CJS_WRAPPER_PREFIX + code + '})(exports, require, module, __filename, __dirname);';
 }
 
 export function addShebangHeader(code) {
@@ -210,11 +220,11 @@ export async function patchFile(inputPath, outputPath) {
   const raw = await readFile(inputPath, 'utf8');
   console.log(`Input:  ${inputPath} (${raw.length} bytes)`);
 
-  // Strip Bun wrapper
-  let code = stripBunWrapper(raw);
-  console.log('[OK] Stripped Bun CJS wrapper');
+  // Strip Bun wrapper (temporarily)
+  let { code, hasWrapper } = stripBunWrapper(raw);
+  console.log(`[OK] Stripped Bun CJS wrapper (hasWrapper: ${hasWrapper})`);
 
-  // AST patching (P1/P2/P3)
+  // AST patching (P1/P2/P3/P5)
   console.log('[..] Parsing AST...');
   const result = astPatch(code);
   code = result.code;
@@ -225,9 +235,14 @@ export async function patchFile(inputPath, outputPath) {
   console.log(`[${s.p3 > 0 ? 'OK' : '! '}] P3: Patched ${s.p3} $bunfs require paths`);
   console.log(`[${s.p5 ? 'OK' : '! '}] P5: EMBEDDED_SEARCH_TOOLS guard ${s.p5 ? 'restored' : 'not found (may be Windows build)'}`);
 
-  // AST validation
+  // Restore CJS wrapper
+  code = restoreBunWrapper(code, hasWrapper);
+  if (hasWrapper) console.log('[OK] Restored CJS wrapper with IIFE');
+
+  // AST validation (only inner content, not with wrapper)
+  const { code: validateCode } = stripBunWrapper(code);
   try {
-    acorn.parse(code, { ecmaVersion: 2022, sourceType: 'script' });
+    acorn.parse(validateCode, { ecmaVersion: 2022, sourceType: 'script' });
     console.log('[OK] Post-patch AST validation passed');
   } catch (e) {
     console.error('[X]  Post-patch AST validation FAILED:', e.message);
