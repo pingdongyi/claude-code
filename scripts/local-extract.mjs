@@ -342,8 +342,14 @@ export async function localExtract({
   const pkgPath = join(wrapperDir, 'package.json');
   const pkg = JSON.parse(await readFile(pkgPath, 'utf8'));
 
-  // Remove platform optionalDependencies (we have everything embedded)
-  pkg.optionalDependencies = {};
+  // Remove platform optionalDependencies (we have cli.js + vendor embedded)
+  // Keep @img/sharp-* for image processing support
+  const optDeps = pkg.optionalDependencies || {};
+  for (const key of Object.keys(optDeps)) {
+    if (key.startsWith('@anthropic-ai/claude-code-')) {
+      delete optDeps[key];
+    }
+  }
 
   // Set bin directly to cli.js
   pkg.bin = { claude: 'cli.js' };
