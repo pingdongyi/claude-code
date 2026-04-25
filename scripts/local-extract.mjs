@@ -351,10 +351,10 @@ export async function localExtract({
 
   // Remove platform optionalDependencies (we have cli.js + vendor embedded)
   // Keep @img/sharp-* for image processing support
-  const optDeps = pkg.optionalDependencies || {};
-  for (const key of Object.keys(optDeps)) {
+  pkg.optionalDependencies = pkg.optionalDependencies || {};
+  for (const key of Object.keys(pkg.optionalDependencies)) {
     if (key.startsWith('@anthropic-ai/claude-code-')) {
-      delete optDeps[key];
+      delete pkg.optionalDependencies[key];
     }
   }
 
@@ -362,13 +362,17 @@ export async function localExtract({
   pkg.bin = { claude: 'cli.js' };
 
   // Remove scripts that block local use
+  pkg.scripts = pkg.scripts || {};
   delete pkg.scripts.postinstall;
   delete pkg.scripts.prepare;
 
-  // Add vendor to files (keep existing files from wrapper)
-  if (!pkg.files) pkg.files = [];
+  // Clean up files: remove obsolete entries, add new ones
+  pkg.files = pkg.files || [];
+  pkg.files = pkg.files.filter(f => !f.startsWith('bin/'));
   if (!pkg.files.includes('cli.js')) pkg.files.push('cli.js');
   if (!pkg.files.includes('vendor/')) pkg.files.push('vendor/');
+  // Remove install.cjs and cli-wrapper.cjs (no longer needed)
+  pkg.files = pkg.files.filter(f => f !== 'install.cjs' && f !== 'cli-wrapper.cjs');
 
   await writeFile(join(stagingDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
   console.log('  ✓ package.json');
