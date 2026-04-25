@@ -12,9 +12,6 @@ on:
         required: false
         type: boolean
         default: false
-  schedule:
-    # Check for new versions every 3 hours
-    - cron: '0 */3 * * *'
 
 permissions:
   contents: write
