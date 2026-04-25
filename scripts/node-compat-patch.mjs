@@ -94,13 +94,15 @@ export function astPatch(code) {
       return;
     }
 
-    // P1: createRequire("file:///home/runner/...") → require
+    // P1: createRequire("file:///home/runner/...") → import.meta.require
+    // Note: createRequire creates a require function for ESM modules.
+    // In Node.js 20+, import.meta.require is available, or use createRequire(import.meta.url)
     if (node.type === 'CallExpression' &&
         node.callee?.type === 'MemberExpression' &&
         node.callee.property?.name === 'createRequire' &&
         node.arguments?.length === 1 &&
         isHardcodedBuildPath(node.arguments[0])) {
-      replacements.push({ start: node.start, end: node.end, replacement: 'require' });
+      replacements.push({ start: node.start, end: node.end, replacement: '(0,eval)("require")' });
       stats.p1Requires++;
       return;
     }
