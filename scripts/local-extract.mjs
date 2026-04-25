@@ -348,13 +348,16 @@ async function extractPlatform({
 
   // Create tarball
   console.log(`[5] Creating tarball...`);
-  await mkdir(outputDir, { recursive: true });
 
-  const tarballName = execFileSync('npm', ['pack', '--pack-destination', outputDir],
+  // Resolve outputDir to absolute path
+  const absOutputDir = outputDir.startsWith('/') ? outputDir : join(process.cwd(), outputDir);
+  await mkdir(absOutputDir, { recursive: true });
+
+  const tarballName = execFileSync('npm', ['pack', '--pack-destination', absOutputDir],
     { cwd: stagingDir, encoding: 'utf8', timeout: 30_000 }).trim();
 
-  const generatedTarball = join(outputDir, tarballName);
-  const desiredTarball = join(outputDir, `anthropic-ai-claude-code-${version}-${platform}.tgz`);
+  const generatedTarball = join(absOutputDir, tarballName);
+  const desiredTarball = join(absOutputDir, `anthropic-ai-claude-code-${version}-${platform}.tgz`);
 
   if (generatedTarball !== desiredTarball) {
     await copyFile(generatedTarball, desiredTarball);
