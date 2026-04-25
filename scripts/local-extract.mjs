@@ -388,6 +388,21 @@ export async function localExtract({
     }
   }
 
+  // Sort package.json fields for consistent output
+  if (pkg.dependencies) {
+    pkg.dependencies = Object.fromEntries(
+      Object.entries(pkg.dependencies).sort(([a], [b]) => a.localeCompare(b))
+    );
+  }
+  if (pkg.optionalDependencies) {
+    pkg.optionalDependencies = Object.fromEntries(
+      Object.entries(pkg.optionalDependencies).sort(([a], [b]) => a.localeCompare(b))
+    );
+  }
+  if (pkg.files) {
+    pkg.files.sort();
+  }
+
   await writeFile(join(stagingDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
   console.log('  ✓ package.json');
 
