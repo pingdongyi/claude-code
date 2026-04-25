@@ -323,6 +323,9 @@ async function extractPlatform({
   delete pkg.scripts.postinstall;
   delete pkg.scripts.prepare;
 
+  // Remove "type": "module" - we use CJS wrapper which provides require/exports/__filename
+  delete pkg.type;
+
   // Clean and add files
   pkg.files = pkg.files || [];
   pkg.files = pkg.files.filter(f => !f.startsWith('bin/') && f !== 'install.cjs' && f !== 'cli-wrapper.cjs');
