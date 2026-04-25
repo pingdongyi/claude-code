@@ -197,9 +197,13 @@ async function downloadSeccomp(tmpDir) {
 
 export async function localExtract({
   version,
-  outputPath = './claude-code.tgz',
+  outputDir = './artifacts',
   verify = true,
 }) {
+  // Determine output path: if dir doesn't end with .tgz, append official filename
+  const tarballFilename = `anthropic-ai-claude-code-${version}.tgz`;
+  const outputPath = outputDir.endsWith('.tgz') ? outputDir : join(outputDir, tarballFilename);
+
   // Use a temp directory separate from output file
   const tmpDir = join(tmpdir(), `claude-extract-${Date.now()}`);
   await mkdir(tmpDir, { recursive: true });
@@ -394,7 +398,7 @@ if (isMain) {
   const flags = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--version' && args[i+1]) flags.version = args[++i];
-    else if (args[i] === '--output' && args[i+1]) flags.outputPath = args[++i];
+    else if (args[i] === '--output' && args[i+1]) flags.outputDir = args[++i];
     else if (args[i] === '--latest') flags.latest = true;
     else if (args[i] === '--no-verify') flags.verify = false;
   }
@@ -404,7 +408,8 @@ if (isMain) {
     console.error('       node local-extract.mjs --latest');
     console.error('');
     console.error('Options:');
-    console.error('  --output <path>  Output tarball path (default: ./claude-code.tgz)');
+    console.error('  --output <dir>   Output directory (default: ./artifacts)');
+    console.error('                    Filename: anthropic-ai-claude-code-{version}.tgz');
     console.error('  --no-verify      Skip Node.js compat verification');
     console.error('  --latest         Use latest version');
     console.error('');
@@ -412,7 +417,7 @@ if (isMain) {
     process.exit(1);
   }
 
-  if (!flags.outputPath) flags.outputPath = './claude-code.tgz';
+  if (!flags.outputDir) flags.outputDir = './artifacts';
 
   if (flags.latest || !flags.version) {
     flags.version = execFileSync('npm', ['view', '@anthropic-ai/claude-code', 'version'],
