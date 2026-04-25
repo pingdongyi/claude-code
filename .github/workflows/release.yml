@@ -153,7 +153,8 @@ jobs:
             printf '%s\n' "---"
             printf '\n%s\n\n%s\n\n' "## Installation (Node.js restored)" "These packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries)."
             printf '%s\n\n%s\n\n' "### Quick Install" "Download the tarball for your platform and install locally:"
-            printf '    npm install ./anthropic-ai-claude-code-%s-linux-x64.tgz\n\n' "$VERSION"
+            printf '```bash\nnpm install ./anthropic-ai-claude-code-%s-{platform}.tgz\n```\n\n' "$VERSION"
+            printf 'Replace `{platform}` with your platform: darwin-arm64, darwin-x64, linux-arm64, linux-x64, linux-arm64-musl, linux-x64-musl, win32-arm64, win32-x64.\n\n'
             printf '%s\n\n' "### Available Platforms"
             printf '%s\n%s\n' "| Platform | Tarball |" "|----------|---------|"
             printf '| macOS ARM64 | anthropic-ai-claude-code-%s-darwin-arm64.tgz |\n' "$VERSION"
