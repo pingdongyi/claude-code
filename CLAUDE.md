@@ -10,8 +10,10 @@ This project restores Claude Code for Node.js execution by extracting JavaScript
 
 ```bash
 npm ci                           # Install dependencies
-npm run process -- --latest      # Process latest Claude Code version
+npm run process -- --latest      # Process latest Claude Code version (full pipeline)
 npm run process -- --version X.Y.Z  # Process specific version
+npm run local -- --latest        # Local extraction (no GitHub Actions dependency)
+npm run local -- --version X.Y.Z --tarballs  # Local extraction with tarballs
 npm run extract                  # Extract from Bun SEA binary (requires args)
 npm run patch                    # Patch cli.js for Node.js compat (requires args)
 ```
@@ -20,6 +22,11 @@ Individual script usage:
 ```bash
 node scripts/fetch-and-process.mjs --latest
 node scripts/fetch-and-process.mjs --version 2.1.116 --output ./dist
+node scripts/local-extract.mjs --latest                      # Current platform only
+node scripts/local-extract.mjs --latest --all                # All platforms
+node scripts/local-extract.mjs --version 2.1.119 --platform linux-x64,linux-arm64
+node scripts/local-extract.mjs --version 2.1.119 --tarballs  # Create npm tarballs
+node scripts/local-extract.mjs --version 2.1.119 --no-verify # Skip verification
 node scripts/bun-sea-extract.mjs <binary> [outdir]
 node scripts/node-compat-patch.mjs <cli.js> [output.js]
 node scripts/verify-node-compat.mjs <cli.js>
