@@ -358,8 +358,10 @@ export async function localExtract({
   delete pkg.scripts.postinstall;
   delete pkg.scripts.prepare;
 
-  // Add vendor to files
-  pkg.files = ['cli.js', 'vendor/', 'sdk-tools.d.ts'];
+  // Add vendor to files (keep existing files from wrapper)
+  if (!pkg.files) pkg.files = [];
+  if (!pkg.files.includes('cli.js')) pkg.files.push('cli.js');
+  if (!pkg.files.includes('vendor/')) pkg.files.push('vendor/');
 
   await writeFile(join(stagingDir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
   console.log('  ✓ package.json');
