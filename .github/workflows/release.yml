@@ -146,34 +146,21 @@ jobs:
           # Get release notes from official Claude Code
           BODY=$(gh api "repos/anthropics/claude-code/releases/tags/v${VERSION}" --jq '.body' 2>/dev/null || echo "")
 
-          # Write combined release notes to a temp file using heredoc
+          # Write combined release notes to a temp file (avoids shell quoting issues)
           NOTES_FILE=$(mktemp)
-          cat > "$NOTES_FILE" << EOF
-${BODY}
-
----
-
-## Installation (Node.js restored)
-
-These packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries).
-
-### Quick Install
-
-Download the tarball for your platform and install locally:
-
-    npm install ./anthropic-ai-claude-code-${VERSION}-linux-x64.tgz
-
-### Available Platforms
-
-- macOS ARM64: anthropic-ai-claude-code-${VERSION}-darwin-arm64.tgz
-- macOS x64: anthropic-ai-claude-code-${VERSION}-darwin-x64.tgz
-- Linux ARM64: anthropic-ai-claude-code-${VERSION}-linux-arm64.tgz
-- Linux x64: anthropic-ai-claude-code-${VERSION}-linux-x64.tgz
-- Linux ARM64 (musl): anthropic-ai-claude-code-${VERSION}-linux-arm64-musl.tgz
-- Linux x64 (musl): anthropic-ai-claude-code-${VERSION}-linux-x64-musl.tgz
-- Windows ARM64: anthropic-ai-claude-code-${VERSION}-win32-arm64.tgz
-- Windows x64: anthropic-ai-claude-code-${VERSION}-win32-x64.tgz
-EOF
+          printf '%s\n\n---\n\n## Installation (Node.js restored)\n\n' "$BODY" >> "$NOTES_FILE"
+          printf 'These packages restore Claude Code for Node.js execution (extracted from official Bun SEA binaries).\n\n' >> "$NOTES_FILE"
+          printf '### Quick Install\n\nDownload the tarball for your platform and install locally:\n\n' >> "$NOTES_FILE"
+          printf '    npm install ./anthropic-ai-claude-code-%s-linux-x64.tgz\n\n' "$VERSION" >> "$NOTES_FILE"
+          printf '### Available Platforms\n\n' >> "$NOTES_FILE"
+          printf '- macOS ARM64: anthropic-ai-claude-code-%s-darwin-arm64.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '- macOS x64: anthropic-ai-claude-code-%s-darwin-x64.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '- Linux ARM64: anthropic-ai-claude-code-%s-linux-arm64.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '- Linux x64: anthropic-ai-claude-code-%s-linux-x64.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '- Linux ARM64 (musl): anthropic-ai-claude-code-%s-linux-arm64-musl.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '- Linux x64 (musl): anthropic-ai-claude-code-%s-linux-x64-musl.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '- Windows ARM64: anthropic-ai-claude-code-%s-win32-arm64.tgz\n' "$VERSION" >> "$NOTES_FILE"
+          printf '- Windows x64: anthropic-ai-claude-code-%s-win32-x64.tgz\n' "$VERSION" >> "$NOTES_FILE"
 
           gh release create "v${VERSION}" \
             --repo "$GITHUB_REPOSITORY" \
